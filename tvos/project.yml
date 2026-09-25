@@ -66,3 +66,4 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.streamingfinder
+        ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"

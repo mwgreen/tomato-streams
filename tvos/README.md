@@ -74,5 +74,6 @@ the title page asks `serve.py` for them the first time it opens, exactly like th
 - This code was written without access to Xcode, so expect to fix a few compile-time
   nits on first build; the structure is deliberately plain SwiftUI.
 - The app never sees any API key. It only talks to `serve.py`.
-- No app icon is included; Xcode shows a placeholder. Add one under an asset catalog
-  named "App Icon & Top Shelf Image" if you want it to look finished on the home screen.
+- The app icon (a layered tomato, so it tilts in 3D on focus) and the Top Shelf banners
+  are drawn by `icon/make_icon.swift` into `StreamingFinder/Assets.xcassets`. Change the
+  colours or proportions there and run `swift icon/make_icon.swift` from `tvos/`.
