@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Poster card for the browse grid. The poster is the focusable element (tvOS card style
 /// gives it the lift-and-parallax); title, scores and services sit underneath.
@@ -46,22 +47,43 @@ struct TitleCard: View {
     }
 }
 
+/// Poster with retry and an in-memory cache. AsyncImage is not used here: it shows its
+/// failure state for good once a load fails *or is cancelled*, which happened to the first
+/// rows whenever the grid redrew while the catalogs were still downloading.
 struct PosterImage: View {
     let url: String?
     let title: String
+    @State private var image: UIImage?
+    @State private var gaveUp = false
 
     var body: some View {
-        AsyncImage(url: url.flatMap(URL.init(string:))) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable().aspectRatio(contentMode: .fill)
-            case .failure:
-                placeholder
-            default:
-                placeholder.overlay(ProgressView())
+        ZStack {
+            if let image {
+                Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                placeholder.overlay { if !gaveUp && url != nil { ProgressView() } }
             }
         }
         .clipped()
+        .task(id: url) { await load() }
+    }
+
+    private func load() async {
+        guard let url, let target = URL(string: url) else { gaveUp = true; return }
+        if let cached = PosterCache.shared.object(forKey: url as NSString) { image = cached; return }
+        image = nil
+        gaveUp = false
+        for attempt in 1...3 {
+            if Task.isCancelled { return }  // view went away; .task runs again when it comes back
+            if let (data, resp) = try? await URLSession.shared.data(from: target),
+               (resp as? HTTPURLResponse)?.statusCode == 200, let loaded = UIImage(data: data) {
+                PosterCache.shared.setObject(loaded, forKey: url as NSString)
+                image = loaded
+                return
+            }
+            try? await Task.sleep(for: .seconds(Double(attempt)))
+        }
+        if !Task.isCancelled { gaveUp = true }
     }
 
     private var placeholder: some View {
@@ -70,4 +92,13 @@ struct PosterImage: View {
             Text(title).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).padding()
         }
     }
+}
+
+/// Decoded posters shared by every card and the detail page.
+enum PosterCache {
+    static let shared: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 600
+        return cache
+    }()
 }
