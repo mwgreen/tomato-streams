@@ -295,6 +295,38 @@
     return services.map((s) => `<span class="badge" data-service="${slug(s)}">${escapeHtml(s)}</span>`).join("");
   }
 
+  /** Direct link for a title on a service: an exact per-title URL from the JSON if present,
+   *  else the service's search page from watch-links.js, else the JustWatch page. */
+  function watchUrl(m, service) {
+    const exact = m.watch_urls && m.watch_urls[service];
+    if (exact) return exact;
+    const tpl = (window.WATCH_LINKS || {})[slug(service)];
+    if (tpl) return tpl.replace("{q}", encodeURIComponent(m.title));
+    return m.justwatch_link || null;
+  }
+
+  /** Badges that open the service directly (used on cards and list rows). */
+  function watchBadgesHtml(m) {
+    if (!m.services.length) return `<span class="badge badge-none">no service</span>`;
+    return m.services.map((s) => {
+      const url = watchUrl(m, s);
+      const label = escapeHtml(s);
+      return url
+        ? `<a class="badge" data-service="${slug(s)}" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="Open ${label}">${label}</a>`
+        : `<span class="badge" data-service="${slug(s)}">${label}</span>`;
+    }).join("");
+  }
+
+  function watchButtonsHtml(m) {
+    const buttons = m.services.map((s) => {
+      const url = watchUrl(m, s);
+      if (!url) return "";
+      const exact = !!(m.watch_urls && m.watch_urls[s]);
+      return `<a class="watch-btn" data-service="${slug(s)}" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="${exact ? "Open this title on" : "Search for this title on"} ${escapeHtml(s)}"><span class="play">▶</span> Watch on ${escapeHtml(s)}</a>`;
+    }).join("");
+    return buttons || `<span class="badge badge-none">not on a configured service</span>`;
+  }
+
   /** "2016–2022", "2022–" (still running) or "1995". */
   function yearsLabel(m) {
     if (m.kind !== "tv") return m.year ? String(m.year) : "";
@@ -333,7 +365,7 @@
       <div class="card-body">
         <h3>${escapeHtml(m.title)}${isNew(m) ? `<span class="tag-new" title="Added ${fmtDate(addedKey(m))}">New</span>` : ""}</h3>
         <div class="meta">${meta}</div>
-        <div class="badges">${badgesHtml(m.services)}</div>
+        <div class="badges">${watchBadgesHtml(m)}</div>
         <div class="scores">${criticScoreHtml(m.rt, true)}${audienceScoreHtml(m.rt, false)}</div>
         <div class="genres">${escapeHtml((m.genres || []).join(", "))}</div>
         <p class="overview">${escapeHtml(m.overview || "")}</p>
@@ -344,8 +376,8 @@
       ev.stopPropagation();
       toggleHidden(m, node);
     });
-    node.addEventListener("click", () => openDetail(m));
-    node.addEventListener("keydown", (ev) => { if (ev.key === "Enter") openDetail(m); });
+    node.addEventListener("click", (ev) => { if (!ev.target.closest("a.badge")) openDetail(m); });
+    node.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.target.closest("a.badge")) openDetail(m); });
     return node;
   }
 
@@ -359,7 +391,7 @@
       <td class="col-title">
         <span class="title">${escapeHtml(m.title)}</span>
         <span class="sub">${[yearsLabel(m), lengthLabel(m), (m.genres || []).slice(0, 2).join(", ")].filter(Boolean).map(escapeHtml).join(" · ")}</span>
-        <div class="badges badges-inline">${badgesHtml(m.services)}</div>
+        <div class="badges badges-inline">${watchBadgesHtml(m)}</div>
       </td>
       <td class="col-year">${yearsLabel(m)}</td>
       <td class="col-added">${addedLabel(m)}</td>
@@ -368,7 +400,7 @@
       <td class="col-score">${criticScoreHtml(m.rt, false)}</td>
       <td class="col-count">${m.rt.critic_count ? m.rt.critic_count.toLocaleString() : ""}</td>
       <td class="col-score">${audienceScoreHtml(m.rt, false)}</td>
-      <td class="col-services"><div class="badges">${badgesHtml(m.services)}</div></td>
+      <td class="col-services"><div class="badges">${watchBadgesHtml(m)}</div></td>
       <td class="col-actions"><button class="hide-btn" type="button" title="${hidden.has(m.tmdb_id) ? "Un-hide" : "Hide this title"}" aria-label="Hide">✕</button></td>`;
     const img = node.querySelector("img");
     if (img) img.addEventListener("error", () => img.replaceWith(Object.assign(document.createElement("span"), { className: "thumb-empty" })), { once: true });
@@ -376,8 +408,8 @@
       ev.stopPropagation();
       toggleHidden(m, node);
     });
-    node.addEventListener("click", () => openDetail(m));
-    node.addEventListener("keydown", (ev) => { if (ev.key === "Enter") openDetail(m); });
+    node.addEventListener("click", (ev) => { if (!ev.target.closest("a.badge")) openDetail(m); });
+    node.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.target.closest("a.badge")) openDetail(m); });
     return node;
   }
 
@@ -417,7 +449,7 @@
     $("detail-scores").innerHTML = `
       <span>${criticScoreHtml(rt, false)}<span class="sub">${rt.certified_fresh ? "Certified Fresh · " : "Tomatometer · "}${rt.critic_count ? rt.critic_count.toLocaleString() + " reviews" : "no reviews"}</span></span>
       <span>${audienceScoreHtml(rt, false)}<span class="sub">Audience · ${rt.audience_count ? escapeHtml(rt.audience_count) + " ratings" : "no ratings"}</span></span>`;
-    $("detail-services").innerHTML = badgesHtml(m.services);
+    $("detail-watch").innerHTML = watchButtonsHtml(m);
     const addedLines = Object.entries(m.added || {}).map(([name, d]) =>
       `${escapeHtml(name)}: ${d <= (data.tracking_since || "") ? "before " + fmtDate(d) : fmtDate(d)}`);
     const releaseLine = m.release_date ? `${m.kind === "tv" ? "First aired" : "Released"} ${fmtDate(m.release_date)}` : "";

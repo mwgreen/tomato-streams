@@ -152,8 +152,15 @@ service, score coverage and failures. OMDb usage is tracked in
   be useful; a title that leaves a service and returns counts as new again.
 - Sort: critic score, audience score, combined average, critic review count, year, title.
   Ties are broken by review count.
-- Click a card for the backdrop, full description, trailer and links to Rotten Tomatoes
-  and JustWatch. The × on a card hides a title (stored in your browser); toggle
+- Click a card for the backdrop, full description, trailer, links to Rotten Tomatoes and
+  JustWatch, and a **Watch on <service>** button per service. The service badges on
+  cards and list rows are the same links. On an iPhone these open the service's native
+  app when it is installed (Universal Links), otherwise its website.
+- The buttons open the service's *search* for the title, since TMDB does not provide
+  per-service title URLs. The search URL templates live in `web/watch-links.js`; edit
+  that file if a service changes its site. A title can carry exact links instead
+  (`"watch_urls": {"Netflix": "https://www.netflix.com/title/123"}` in the JSON), which
+  take precedence; a Watchmode or Streaming Availability API step could fill those in. The × on a card hides a title (stored in your browser); toggle
   "Show hidden" to bring them back.
 - Filter, sort and view state lives in the URL hash, so views can be bookmarked. The
   Movies / TV Series tabs carry the current filters across, and the last selections are

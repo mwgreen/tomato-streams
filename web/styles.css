@@ -167,6 +167,34 @@ input[type="date"] { width: 100%; padding: 6px 9px; background: var(--bg); borde
 .badges { display: flex; flex-wrap: wrap; gap: 5px; }
 .card .badges { margin: 2px 0; }
 .badges-lg .badge { font-size: 13px; padding: 4px 10px; }
+a.badge { text-decoration: none; cursor: pointer; }
+a.badge:hover, a.badge:focus-visible { filter: brightness(1.3); outline: none; box-shadow: 0 0 0 2px rgba(255, 255, 255, .25); }
+.watch-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 12px; }
+.watch-btn {
+  display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
+  padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 14px; color: #fff;
+  background: #2c3240; border: 1px solid #3a4152;
+}
+.watch-btn:hover { filter: brightness(1.2); }
+.watch-btn .play { font-size: 12px; opacity: .85; }
+.watch-btn[data-service="netflix"] { background: #4b1216; border-color: #8a1f27; }
+.watch-btn[data-service="prime-video"] { background: #0f3a55; border-color: #1a6a97; }
+.watch-btn[data-service="apple-tv"] { background: #333; border-color: #666; }
+.watch-btn[data-service="hbo-max"] { background: #2b1a5c; border-color: #5a3bb0; }
+.watch-btn[data-service="hulu"] { background: #0f4a2a; border-color: #1ea25a; }
+.watch-btn[data-service="disney"] { background: #12285a; border-color: #2c55b8; }
+.watch-btn[data-service="paramount"] { background: #0d3260; border-color: #1f5fb5; }
+.watch-btn[data-service="peacock"] { background: #3b2a06; border-color: #b78a1a; }
+.watch-btn[data-service="starz"] { background: #1b1b1b; border-color: #7a7a7a; }
+.watch-btn[data-service="amc"] { background: #3a0f12; border-color: #a52a2a; }
+.watch-btn[data-service="mgm"] { background: #3a2a00; border-color: #c9a227; }
+.watch-btn[data-service="criterion-channel"] { background: #0f2f3a; border-color: #2e8ea6; }
+.watch-btn[data-service="mubi"] { background: #10203a; border-color: #3d6bd6; }
+.watch-btn[data-service="britbox"] { background: #1a1f4a; border-color: #4a55c8; }
+.watch-btn[data-service="acorn-tv"] { background: #0e3a1f; border-color: #2f9c55; }
+.watch-btn[data-service="shudder"] { background: #2b0a0a; border-color: #c0392b; }
+.watch-btn[data-service="crunchyroll"] { background: #4a2a00; border-color: #f47521; }
+.watch-btn[data-service="tubi"] { background: #3a1a00; border-color: #fa7f1f; }
 .badge {
   font-size: 11.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; line-height: 1.2;
   background: #2c3240; color: #dfe4ef; border: 1px solid #3a4152;
@@ -254,6 +282,7 @@ body.sidebar-open { overflow: hidden; }
   /* 16px inputs stop iOS Safari from zooming in on focus */
   input[type="search"], input[type="number"], select { font-size: 16px; }
   .btn { min-height: 38px; }
+  .watch-btn { padding: 10px 14px; font-size: 15px; }
   .kind-nav { margin-left: 0; }
   .kind-nav a { padding: 5px 9px; font-size: 13px; }
   .topbar h1 { display: none; }
