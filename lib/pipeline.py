@@ -210,8 +210,25 @@ def ensure_scores(entry: dict, cache: MovieCache, cfg: Config, omdb: OMDbClient 
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
-def build_movie(details: dict, services: list[str], scores: RTScores) -> dict:
+def track_first_seen(entry: dict, carried: list[str], today: str) -> bool:
+    """Record the first date each carrying service was seen for this title.
+
+    Returns True if the entry changed (so the caller can persist it). Services the
+    title is no longer on are forgotten, so a title that leaves and comes back
+    counts as newly added again.
+    """
+    seen = dict(entry.get("services_first_seen") or {})
+    updated = {name: seen.get(name) or today for name in carried}
+    if updated != seen:
+        entry["services_first_seen"] = updated
+        return True
+    return False
+
+
+def build_movie(details: dict, services: list[str], scores: RTScores,
+                first_seen: dict | None = None) -> dict:
     kind = details.get("kind") or "movie"
+    added = {name: first_seen[name] for name in services if first_seen and first_seen.get(name)}
     tv_fields = {}
     if kind == "tv":
         tv_fields = {
@@ -227,6 +244,7 @@ def build_movie(details: dict, services: list[str], scores: RTScores) -> dict:
         "title": details.get("title"),
         "original_title": details.get("original_title"),
         "year": details.get("year"),
+        "release_date": details.get("release_date"),
         "overview": details.get("overview"),
         "runtime": details.get("runtime"),
         **tv_fields,
@@ -238,6 +256,8 @@ def build_movie(details: dict, services: list[str], scores: RTScores) -> dict:
         "tmdb_vote_average": details.get("tmdb_vote_average"),
         "tmdb_vote_count": details.get("tmdb_vote_count"),
         "services": services,
+        "added": added,                                  # service -> first date seen there
+        "added_at": min(added.values()) if added else None,
         "justwatch_link": details.get("justwatch_link"),
         "rt": {
             "url": scores.url,
@@ -286,6 +306,7 @@ def run_sync(cfg: Config, tmdb: TMDBClient, omdb: OMDbClient | None, rt: RottenT
     log.info("processing %d titles", total)
 
     movies: list[dict] = []
+    today = now_iso()[:10]
     for i, (tmdb_id, _info) in enumerate(ordered, 1):
         try:
             entry = ensure_details(tmdb, cache, cfg, tmdb_id, full, summary, kind)
@@ -303,8 +324,10 @@ def run_sync(cfg: Config, tmdb: TMDBClient, omdb: OMDbClient | None, rt: RottenT
             log.debug("dropping %r: flatrate providers %s match no enabled service",
                       details.get("title"), details.get("flatrate_provider_names"))
             continue
+        if track_first_seen(entry, carried, today):
+            cache.save(tmdb_id, entry)
         scores = ensure_scores(entry, cache, cfg, omdb, rt, full, summary)
-        movies.append(build_movie(details, carried, scores))
+        movies.append(build_movie(details, carried, scores, entry.get("services_first_seen")))
         if progress_every and i % progress_every == 0:
             log.info("  %d/%d  %s (%s) -> %s", i, total, details.get("title"), details.get("year"),
                      scores.status)
@@ -325,11 +348,17 @@ def run_sync(cfg: Config, tmdb: TMDBClient, omdb: OMDbClient | None, rt: RottenT
     if omdb is not None and omdb.enabled:
         summary.omdb_used_today = omdb.used_today
 
+    added_dates = [d for m in movies for d in (m.get("added") or {}).values()]
+    previous_since = (previous or {}).get("tracking_since")
+    tracking_since = min([d for d in added_dates + [previous_since] if d] or [today])
     output = {
         "generated_at": now_iso(),
         "kind": kind,
         "region": cfg.region,
         "services": [s.name for s in enabled],
+        # Availability is tracked by this app from its first sync; "added" dates equal to
+        # this value mean "already there when tracking started".
+        "tracking_since": tracking_since,
         "ui_defaults": {"min_critic_reviews": cfg.ui_defaults.min_critic_reviews,
                         "sort": cfg.ui_defaults.sort},
         "movies": movies,

@@ -94,12 +94,26 @@
       </fieldset>
 
       <fieldset>
-        <legend>Year &amp; runtime</legend>
+        <legend id="release-legend">Release date</legend>
         <div class="row">
-          <input type="number" id="year-min" placeholder="From" min="1900" max="2100" inputmode="numeric" aria-label="Year from">
+          <input type="text" id="year-min" placeholder="From: 2022" aria-label="Released from (year or YYYY-MM-DD)" title="A year (2022) or a full date (2022-06-01)">
           <span>–</span>
-          <input type="number" id="year-max" placeholder="To" min="1900" max="2100" inputmode="numeric" aria-label="Year to">
+          <input type="text" id="year-max" placeholder="To: 2024" aria-label="Released up to (year or YYYY-MM-DD)" title="A year (2024) or a full date (2024-12-31)">
         </div>
+        <p class="hint">Type a year or a full date like 2022-06-01.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Added to service</legend>
+        <label class="field">
+          <span class="label">On or after</span>
+          <input type="date" id="added-min" aria-label="Added to a checked service on or after">
+        </label>
+        <p class="hint" id="added-hint">Tracked by this app since its first sync; earlier arrivals show as “before” that date.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Runtime</legend>
         <label class="field">
           <span class="label" id="runtime-label">Max runtime (minutes)</span>
           <input type="number" id="runtime-max" min="0" step="5" placeholder="any" inputmode="numeric">
@@ -126,6 +140,7 @@
           <option value="audience_desc">Audience score</option>
           <option value="combined_desc">Combined average</option>
           <option value="critic_count_desc">Critic review count</option>
+          <option value="added_desc">Recently added</option>
           <option value="year_desc">Year (newest)</option>
           <option value="year_asc">Year (oldest)</option>
           <option value="title_asc">Title</option>
@@ -147,6 +162,7 @@
             <th class="col-poster"></th>
             <th class="col-title sortable" data-sort="title_asc">Title</th>
             <th class="col-year sortable" data-sort="year_desc" data-sort-alt="year_asc">Year</th>
+            <th class="col-added sortable" data-sort="added_desc" title="First seen on a checked service">Added</th>
             <th class="col-runtime" id="col-runtime">Runtime</th>
             <th class="col-genres">Genres</th>
             <th class="col-score sortable" data-sort="critic_desc" title="Tomatometer">Critics</th>
@@ -175,6 +191,7 @@
     <div class="detail-main">
       <h2 id="detail-title"></h2>
       <p class="detail-meta" id="detail-meta"></p>
+      <p class="detail-added" id="detail-added"></p>
       <div class="badges badges-lg" id="detail-services"></div>
       <div class="detail-scores" id="detail-scores"></div>
       <p id="detail-overview" class="detail-overview"></p>

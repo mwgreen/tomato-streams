@@ -206,6 +206,27 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("HBO Max", text)
         self.assertIn("both critic + audience score: 2/3", text)
 
+    def test_first_seen_tracking(self):
+        from lib.cache import now_iso
+        today = now_iso()[:10]
+        # pretend Heat has been on Netflix since 2024 and on Hulu (no longer carried) since 2023
+        entry = self.cache.load(1)
+        entry["services_first_seen"] = {"Netflix": "2024-01-15", "Hulu": "2023-05-01"}
+        self.cache.save(1, entry)
+        out, _ = self.run_it()
+        self.assertEqual(out["tracking_since"], "2024-01-15")
+        by_title = {m["title"]: m for m in out["movies"]}
+        heat = by_title["Heat"]
+        self.assertEqual(heat["added"], {"Netflix": "2024-01-15", "HBO Max": today})
+        self.assertEqual(heat["added_at"], "2024-01-15")
+        self.assertEqual(heat["release_date"], "1995-05-01")
+        self.assertEqual(by_title["Oppenheimer"]["added"], {"HBO Max": today})
+        self.assertEqual(self.cache.load(1)["services_first_seen"], {"Netflix": "2024-01-15", "HBO Max": today})
+        # a second run keeps the dates and carries tracking_since forward
+        out2, _ = self.run_it(previous=out)
+        self.assertEqual({m["title"]: m["added"] for m in out2["movies"]}, {m["title"]: m["added"] for m in out["movies"]})
+        self.assertEqual(out2["tracking_since"], "2024-01-15")
+
     def test_second_run_uses_cache(self):
         self.run_it()
         self.tmdb.calls = {"discover": 0, "details": 0}

@@ -18,7 +18,7 @@
     minCritic: $("min-critic"), minCriticOut: $("min-critic-out"),
     minAudience: $("min-audience"), minAudienceOut: $("min-audience-out"),
     minReviews: $("min-reviews"), certified: $("certified"), hideNoRt: $("hide-no-rt"),
-    yearMin: $("year-min"), yearMax: $("year-max"), runtimeMax: $("runtime-max"),
+    yearMin: $("year-min"), yearMax: $("year-max"), addedMin: $("added-min"), runtimeMax: $("runtime-max"),
     showHidden: $("show-hidden"), hiddenCount: $("hidden-count"), clearHidden: $("clear-hidden"),
     sort: $("sort"), reset: $("reset"), loadMore: $("load-more"), sentinel: $("sentinel"),
     sidebar: $("sidebar"), sidebarBackdrop: $("sidebar-backdrop"),
@@ -40,7 +40,7 @@
   const defaults = () => ({
     q: "", services: null /* null = all */, mc: 0, ma: 0,
     mr: Number(data.ui_defaults.min_critic_reviews ?? 20),
-    cf: false, hn: true, g: [], y0: "", y1: "", rt: "", sh: false,
+    cf: false, hn: true, g: [], y0: "", y1: "", a0: "", rt: "", sh: false,
     sort: data.ui_defaults.sort || "critic_desc",
     view: storedView(),
   });
@@ -60,6 +60,7 @@
     if (p.has("g")) s.g = p.get("g") ? p.get("g").split(",") : [];
     if (p.has("y0")) s.y0 = p.get("y0");
     if (p.has("y1")) s.y1 = p.get("y1");
+    if (p.has("a0")) s.a0 = p.get("a0");
     if (p.has("rt")) s.rt = p.get("rt");
     if (p.has("sh")) s.sh = p.get("sh") === "1";
     if (p.has("sort")) s.sort = p.get("sort");
@@ -80,6 +81,7 @@
     if (state.g.length) p.set("g", state.g.join(","));
     if (state.y0) p.set("y0", state.y0);
     if (state.y1) p.set("y1", state.y1);
+    if (state.a0) p.set("a0", state.a0);
     if (state.rt) p.set("rt", state.rt);
     if (state.sh) p.set("sh", "1");
     if (state.sort !== d.sort) p.set("sort", state.sort);
@@ -106,14 +108,50 @@
   // ---------------------------------------------------------------------
   // Filtering & sorting
   // ---------------------------------------------------------------------
-  const norm = (s) => (s || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "");
+  const norm = (s) => (s || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+
+  /** "2022" -> "2022-01-01" (or "2022-12-31" for an upper bound); "2022-6-1" -> "2022-06-01"; else null. */
+  function parseDateBound(text, upper) {
+    const t = (text || "").trim();
+    if (!t) return null;
+    let m = /^(\d{4})$/.exec(t);
+    if (m) return upper ? `${m[1]}-12-31` : `${m[1]}-01-01`;
+    m = /^(\d{4})[-/.](\d{1,2})(?:[-/.](\d{1,2}))?$/.exec(t);
+    if (!m) return null;
+    const mm = m[2].padStart(2, "0");
+    const dd = m[3] ? m[3].padStart(2, "0") : (upper ? "31" : "01");
+    return `${m[1]}-${mm}-${dd}`;
+  }
+  /** ISO release date for comparisons; falls back to the year. */
+  const releaseKey = (m, upper) => m.release_date || (m.year ? `${m.year}-${upper ? "12-31" : "01-01"}` : null);
+  /** Latest "first seen" date among the services that are currently checked. */
+  function addedKey(m) {
+    const svc = state.services === null ? null : new Set(state.services);
+    let best = null;
+    for (const [name, date] of Object.entries(m.added || {})) {
+      if (svc && !svc.has(name)) continue;
+      if (!best || date > best) best = date;
+    }
+    return best;
+  }
+  const isNew = (m) => {
+    const d = addedKey(m);
+    if (!d || !data.tracking_since || d <= data.tracking_since) return false;
+    return (Date.now() - Date.parse(d)) < 30 * 86400000;
+  };
+  const fmtDate = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso + "T00:00:00");
+    return isNaN(d) ? iso : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  };
 
   function applyFilters() {
     const q = norm(state.q).trim();
     const svc = state.services === null ? null : new Set(state.services);
     const genres = new Set(state.g);
-    const y0 = state.y0 ? Number(state.y0) : null;
-    const y1 = state.y1 ? Number(state.y1) : null;
+    const y0 = parseDateBound(state.y0, false);
+    const y1 = parseDateBound(state.y1, true);
+    const a0 = parseDateBound(state.a0, false);
     const rtMax = state.rt ? Number(state.rt) : null;
 
     return data.movies.filter((m) => {
@@ -128,8 +166,9 @@
       if (state.mr > 0 && rt.critic_score != null && !((rt.critic_count || 0) >= state.mr)) return false;
       if (state.cf && !rt.certified_fresh) return false;
       if (genres.size && !(m.genres || []).some((g) => genres.has(g))) return false;
-      if (y0 != null && !(m.year >= y0)) return false;
-      if (y1 != null && !(m.year <= y1)) return false;
+      if (y0 != null && !(releaseKey(m, false) >= y0)) return false;
+      if (y1 != null && !(releaseKey(m, true) <= y1)) return false;
+      if (a0 != null) { const ak = addedKey(m); if (!ak || ak < a0) return false; }
       if (rtMax != null && m.runtime && m.runtime > rtMax) return false;
       if (q && !norm(m.title).includes(q) && !norm(m.original_title).includes(q)) return false;
       return true;
@@ -150,6 +189,7 @@
     audience_desc: (a, b) => desc(a.rt.audience_score, b.rt.audience_score) || desc(count(a), count(b)),
     combined_desc: (a, b) => desc(combined(a), combined(b)) || desc(count(a), count(b)),
     critic_count_desc: (a, b) => desc(count(a), count(b)) || desc(a.rt.critic_score, b.rt.critic_score),
+    added_desc: (a, b) => (addedKey(b) || "").localeCompare(addedKey(a) || "") || desc(a.rt.critic_score, b.rt.critic_score),
     year_desc: (a, b) => desc(a.year, b.year) || desc(count(a), count(b)),
     year_asc: (a, b) => (a.year ?? 9999) - (b.year ?? 9999) || desc(count(a), count(b)),
     title_asc: (a, b) => a.title.localeCompare(b.title) || desc(count(a), count(b)),
@@ -241,6 +281,13 @@
     return m.runtime ? `${m.runtime} min` : "";
   }
 
+  /** "Oct 2, 2026" or "before Sep 25, 2026" when it predates tracking. */
+  function addedLabel(m) {
+    const d = addedKey(m);
+    if (!d) return "";
+    return d <= (data.tracking_since || "") ? `before ${fmtDate(d)}` : fmtDate(d);
+  }
+
   function card(m) {
     const node = document.createElement("article");
     node.className = "card" + (hidden.has(m.tmdb_id) ? " is-hidden" : "");
@@ -251,7 +298,7 @@
       <button class="hide-btn" type="button" title="${hidden.has(m.tmdb_id) ? "Un-hide" : "Hide this title"}" aria-label="Hide">✕</button>
       <div class="poster">${m.poster ? `<img loading="lazy" src="${m.poster}" alt="">` : `<div class="no-poster">${escapeHtml(m.title)}</div>`}</div>
       <div class="card-body">
-        <h3>${escapeHtml(m.title)}</h3>
+        <h3>${escapeHtml(m.title)}${isNew(m) ? `<span class="tag-new" title="Added ${fmtDate(addedKey(m))}">New</span>` : ""}</h3>
         <div class="meta">${meta}</div>
         <div class="badges">${badgesHtml(m.services)}</div>
         <div class="scores">${criticScoreHtml(m.rt, true)}${audienceScoreHtml(m.rt, false)}</div>
@@ -282,6 +329,7 @@
         <div class="badges badges-inline">${badgesHtml(m.services)}</div>
       </td>
       <td class="col-year">${yearsLabel(m)}</td>
+      <td class="col-added">${addedLabel(m)}</td>
       <td class="col-runtime">${lengthLabel(m)}</td>
       <td class="col-genres">${escapeHtml((m.genres || []).join(", "))}</td>
       <td class="col-score">${criticScoreHtml(m.rt, false)}</td>
@@ -337,6 +385,10 @@
       <span>${criticScoreHtml(rt, false)}<span class="sub">${rt.certified_fresh ? "Certified Fresh · " : "Tomatometer · "}${rt.critic_count ? rt.critic_count.toLocaleString() + " reviews" : "no reviews"}</span></span>
       <span>${audienceScoreHtml(rt, false)}<span class="sub">Audience · ${rt.audience_count ? escapeHtml(rt.audience_count) + " ratings" : "no ratings"}</span></span>`;
     $("detail-services").innerHTML = badgesHtml(m.services);
+    const addedLines = Object.entries(m.added || {}).map(([name, d]) =>
+      `${escapeHtml(name)}: ${d <= (data.tracking_since || "") ? "before " + fmtDate(d) : fmtDate(d)}`);
+    const releaseLine = m.release_date ? `${m.kind === "tv" ? "First aired" : "Released"} ${fmtDate(m.release_date)}` : "";
+    $("detail-added").textContent = [releaseLine, addedLines.length ? "Added to " + addedLines.join(" · ") : ""].filter(Boolean).join("  ·  ");
     $("detail-overview").textContent = m.overview || "No description available.";
     const trailer = $("detail-trailer");
     trailer.innerHTML = m.trailer_youtube_key
@@ -387,7 +439,7 @@
     el.certified.checked = state.cf;
     el.hideNoRt.checked = state.hn;
     for (const cb of el.genres.querySelectorAll("input")) cb.checked = state.g.includes(cb.value);
-    el.yearMin.value = state.y0; el.yearMax.value = state.y1;
+    el.yearMin.value = state.y0; el.yearMax.value = state.y1; el.addedMin.value = state.a0;
     el.runtimeMax.value = state.rt;
     el.showHidden.checked = state.sh;
     el.sort.value = SORTS[state.sort] ? state.sort : "critic_desc";
@@ -403,7 +455,7 @@
     state.cf = el.certified.checked;
     state.hn = el.hideNoRt.checked;
     state.g = [...el.genres.querySelectorAll("input:checked")].map((c) => c.value);
-    state.y0 = el.yearMin.value; state.y1 = el.yearMax.value;
+    state.y0 = el.yearMin.value; state.y1 = el.yearMax.value; state.a0 = el.addedMin.value;
     state.rt = el.runtimeMax.value;
     state.sh = el.showHidden.checked;
     state.sort = el.sort.value;
@@ -421,7 +473,7 @@
   function wire() {
     $("filters").addEventListener("input", (ev) => {
       const t = ev.target;
-      onChange(!(t.type === "search" || t.type === "number" || t.type === "range"));
+      onChange(!(t.type === "search" || t.type === "number" || t.type === "range" || t.type === "text"));
     });
     $("filters").addEventListener("change", () => onChange(true));
     el.sort.addEventListener("change", () => onChange(true));
@@ -476,6 +528,7 @@
     }
     document.title = KIND === "tv" ? "Streaming Finder · TV Series" : "Streaming Finder · Movies";
     if (KIND === "tv") {
+      $("release-legend").textContent = "First aired";
       $("runtime-label").textContent = "Max episode length (minutes)";
       $("col-runtime").textContent = "Length";
     }
@@ -501,6 +554,10 @@
       const d = new Date(data.generated_at);
       el.generated.textContent = `data from ${isNaN(d) ? data.generated_at : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}`;
       el.generated.title = data.generated_at;
+    }
+    if (data.tracking_since) {
+      $("added-hint").textContent = `Tracked by this app since ${fmtDate(data.tracking_since)}; titles already there then show as “before” that date.`;
+      el.addedMin.min = data.tracking_since;
     }
     buildServiceChecks();
     buildGenreChecks();

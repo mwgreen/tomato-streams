@@ -140,8 +140,16 @@ service, score coverage and failures. OMDb usage is tracked in
   Year, Critics, Reviews or Audience headers) that fits more titles on screen and works
   well on a phone.
 - Filters: services (any checked service), min critic / audience score, min critic
-  review count, Certified Fresh only, genres, year range, max runtime, title search,
-  and "hide titles with no RT score".
+  review count, Certified Fresh only, genres, release date range (type a year such as
+  `2022` or a full date such as `2022-06-01`), "added to service on or after", max
+  runtime, title search, and "hide titles with no RT score".
+- **Added-to-service dates.** Neither TMDB nor OMDb say when a title joined a
+  subscription service, so `sync.py` records the first date it sees each title on each
+  service (`services_first_seen` in the cache, `added` in the JSON). Everything present
+  on the very first sync gets that day's date and shows as "before <date>"; titles that
+  appear on later syncs get their real arrival date, a **New** tag for 30 days, and can
+  be sorted with "Recently added". Run the sync regularly (weekly is fine) for this to
+  be useful; a title that leaves a service and returns counts as new again.
 - Sort: critic score, audience score, combined average, critic review count, year, title.
   Ties are broken by review count.
 - Click a card for the backdrop, full description, trailer and links to Rotten Tomatoes
