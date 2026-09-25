@@ -7,19 +7,20 @@ struct RootView: View {
     var body: some View {
         TabView {
             BrowseView(kind: .movie)
+                .overlay { firstRun }
                 .tabItem { Text("Movies") }
             BrowseView(kind: .tv)
+                .overlay { firstRun }
                 .tabItem { Text("TV Series") }
             SearchView()
                 .tabItem { Image(systemName: "magnifyingglass") }
-            SettingsView()
+            SettingsView()   // no overlay here: Settings is where the first-run card sends you
                 .tabItem { Text("Settings") }
         }
-        .overlay(alignment: .center) {
-            if !store.hasData {
-                FirstRunView()
-            }
-        }
+    }
+
+    @ViewBuilder private var firstRun: some View {
+        if !store.hasData { FirstRunView() }
     }
 }
 

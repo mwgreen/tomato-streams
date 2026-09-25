@@ -38,6 +38,7 @@ struct ScoreBadge: View {
         HStack(spacing: 6) {
             Image(systemName: symbol).foregroundStyle(tint)
             Text(score.map { "\($0)%" } ?? "–").fontWeight(.bold)
+                .lineLimit(1).fixedSize()   // never split "100%" across lines on narrow cards
             if let countText { Text(countText).font(large ? .callout : .caption).foregroundStyle(.secondary) }
         }
         .font(large ? .title2 : .callout)

@@ -60,7 +60,8 @@ final class ServerSettings: ObservableObject {
         stopBrowsing()
         let params = NWParameters.tcp
         params.includePeerToPeer = true
-        let browser = NWBrowser(for: .bonjour(type: "_streamingfinder._tcp", domain: nil), using: params)
+        // The TXT record carries the server's url; plain `.bonjour` results come back without it.
+        let browser = NWBrowser(for: .bonjourWithTXTRecord(type: "_streamingfinder._tcp", domain: nil), using: params)
         browser.browseResultsChangedHandler = { [weak self] results, _ in
             let urls: [String] = results.compactMap { result in
                 if case .bonjour(let txt) = result.metadata, let url = txt["url"], !url.isEmpty { return url }
