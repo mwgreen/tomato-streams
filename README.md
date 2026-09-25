@@ -189,6 +189,11 @@ service, score coverage and failures. OMDb usage is tracked in
   Those URL templates live in `web/watch-links.js`; edit that file if a service changes
   its site. The × on a card hides a title (stored in your browser); toggle
   "Show hidden" to bring them back.
+- **Watched by.** Add the people in your household under "Watched by" in the sidebar,
+  then on a title's detail page tap a name to mark it watched by them. Tick "Hide
+  watched by <name>" to drop everything they have seen from the grid. People and marks
+  are stored by `serve.py` in `data/watched.json`, so the Apple TV app and every phone
+  see the same list; without a server the browser keeps its own copy.
 - Filter, sort and view state lives in the URL hash, so views can be bookmarked. The
   Movies / TV Series tabs carry the current filters across, and the last selections are
   remembered in the browser, so reopening the page brings them back. "Reset filters"

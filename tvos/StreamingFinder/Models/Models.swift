@@ -202,6 +202,7 @@ struct Filters: Codable, Equatable {
     var genre: String? = nil
     var yearFrom: Int? = nil
     var addedWithinDays: Int? = nil
+    var hideWatchedBy: Set<String> = []  // people whose watched titles are hidden
     var sort: SortKey = .critic
 
     static let scoreSteps = [0, 50, 60, 70, 80, 90]
@@ -224,7 +225,7 @@ struct Filters: Codable, Equatable {
 
     /// Filter + sort. `hidden` are title ids the user hid; `hideNoScore` drops titles without RT scores.
     func apply(_ titles: [Title], hidden: Set<String>, showHidden: Bool, hideNoScore: Bool,
-               query: String = "") -> [Title] {
+               query: String = "", watched: [String: [String: String]] = [:]) -> [Title] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         let onlyService: Set<String>? = service.map { [$0] }
         let yearKey = yearFrom.map { "\($0)-01-01" }
@@ -233,6 +234,7 @@ struct Filters: Codable, Equatable {
         }
         var out = titles.filter { t in
             if hidden.contains(t.id) && !showHidden { return false }
+            if !hideWatchedBy.isEmpty, let marks = watched[t.id], marks.keys.contains(where: { hideWatchedBy.contains($0) }) { return false }
             if let service, !t.services.contains(service) { return false }
             if hideNoScore && !t.rt.hasScores { return false }
             if minCritic > 0 && (t.rt.criticScore ?? -1) < minCritic { return false }

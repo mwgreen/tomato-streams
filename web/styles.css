@@ -78,6 +78,18 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 input[type="date"] { width: 100%; padding: 6px 9px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; min-height: 36px; }
 .tag-new { display: inline-block; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: var(--accent-2); color: #1a1200; margin-left: 4px; vertical-align: 1px; }
 .detail-added { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.watched-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+.watched-row .lbl { color: var(--muted); font-size: 13px; margin-right: 2px; }
+.person-chip {
+  padding: 6px 12px; border-radius: 999px; cursor: pointer; font-weight: 600; font-size: 13px;
+  background: var(--bg-card); border: 1px solid var(--border); color: var(--muted);
+}
+.person-chip[aria-pressed="true"] { background: #14532d; border-color: #22a55b; color: #e8ffe8; }
+.person-chip:hover { border-color: var(--muted); }
+.watched-line { color: #5ad48a; font-size: 12px; }
+.card.is-watched .poster { opacity: .8; }
+.checks .person { display: flex; align-items: center; gap: 7px; }
+.checks .person .link { margin-left: auto; color: var(--muted); }
 .list .col-added { white-space: nowrap; color: var(--muted); font-size: 13px; }
 .checks { display: flex; flex-direction: column; gap: 4px; }
 .checks-compact { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }

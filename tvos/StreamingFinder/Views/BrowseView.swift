@@ -6,6 +6,7 @@ struct BrowseView: View {
     @EnvironmentObject var store: CatalogStore
     @EnvironmentObject var settings: ServerSettings
     @EnvironmentObject var hidden: HiddenStore
+    @EnvironmentObject var watched: WatchedStore
     @State private var filters: Filters
 
     init(kind: Kind) {
@@ -16,14 +17,15 @@ struct BrowseView: View {
     private var catalog: Catalog? { store.catalogs[kind] }
 
     private var titles: [Title] {
-        filters.apply(store.titles(kind), hidden: hidden.ids, showHidden: settings.showHidden, hideNoScore: settings.hideNoScore)
+        filters.apply(store.titles(kind), hidden: hidden.ids, showHidden: settings.showHidden, hideNoScore: settings.hideNoScore,
+                      watched: watched.watched)
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    FilterBar(filters: $filters, services: store.services(kind), genres: catalog?.allGenres ?? [], kind: kind)
+                    FilterBar(filters: $filters, services: store.services(kind), genres: catalog?.allGenres ?? [], people: watched.people, kind: kind)
                     HStack {
                         Text("\(titles.count) \(kind.noun)").foregroundStyle(.secondary)
                         if let generated = catalog?.generatedAt {
@@ -53,6 +55,7 @@ struct TitleGrid: View {
     var trackingSince: String?
     var selectedService: String?
     @EnvironmentObject var hidden: HiddenStore
+    @EnvironmentObject var watched: WatchedStore
 
     private var columns: [GridItem] {
         [GridItem(.adaptive(minimum: TitleCard.posterWidth, maximum: TitleCard.posterWidth), spacing: 48, alignment: .top)]
@@ -62,7 +65,7 @@ struct TitleGrid: View {
     var body: some View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: 56) {
             ForEach(titles) { t in
-                TitleCard(title: t, isNew: isNew(t), isHidden: hidden.contains(t))
+                TitleCard(title: t, isNew: isNew(t), isHidden: hidden.contains(t), watchedBy: watched.watchedBy(t))
             }
         }
     }

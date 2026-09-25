@@ -9,6 +9,7 @@
   const HIDDEN_KEY = "smf.hidden." + KIND;
   const VIEW_KEY = "smf.view";
   const STATE_KEY = "smf.state";   // last filters/sort, shared by the Movies and TV pages
+  const WATCHED_KEY = "smf.watched"; // offline fallback for people + watched marks
   const VIEWS = ["grid", "list"];
 
   const $ = (id) => document.getElementById(id);
@@ -21,6 +22,7 @@
     minReviews: $("min-reviews"), certified: $("certified"), hideNoRt: $("hide-no-rt"),
     yearMin: $("year-min"), yearMax: $("year-max"), addedMin: $("added-min"), runtimeMax: $("runtime-max"),
     showHidden: $("show-hidden"), hiddenCount: $("hidden-count"), clearHidden: $("clear-hidden"),
+    people: $("people"), personName: $("person-name"), personAdd: $("person-add"),
     sort: $("sort"), reset: $("reset"), loadMore: $("load-more"), sentinel: $("sentinel"),
     sidebar: $("sidebar"), sidebarBackdrop: $("sidebar-backdrop"),
     toggleFilters: $("toggle-filters"), closeFilters: $("close-filters"),
@@ -30,6 +32,9 @@
   let data = { movies: [], services: [], ui_defaults: {} };
   let allGenres = [];
   let hidden = loadHidden();
+  // People and "watched by" marks, shared with the Apple TV app through serve.py.
+  let watched = { people: [], watched: {} };
+  let watchedApi = true;   // false when there is no server (static hosting): falls back to localStorage
   let visible = [];     // current filtered + sorted list
   let rendered = 0;     // how many of `visible` are in the DOM
 
@@ -42,7 +47,7 @@
   const defaults = () => ({
     q: "", services: null /* null = all */, mc: 0, ma: 0,
     mr: Number(data.ui_defaults.min_critic_reviews ?? 20),
-    cf: false, hn: true, g: [], y0: "", y1: "", a0: "", rt: "", sh: false,
+    cf: false, hn: true, g: [], y0: "", y1: "", a0: "", rt: "", sh: false, hw: [],
     sort: data.ui_defaults.sort || "critic_desc",
     view: storedView(),
   });
@@ -58,6 +63,7 @@
         if (typeof raw[k] === typeof s[k] || (k === "services" && (raw[k] === null || Array.isArray(raw[k])))) s[k] = raw[k];
       }
       if (!Array.isArray(s.g)) s.g = [];
+      if (!Array.isArray(s.hw)) s.hw = [];
       return s;
     } catch { return null; }
   }
@@ -88,6 +94,7 @@
     if (p.has("y0")) s.y0 = p.get("y0");
     if (p.has("y1")) s.y1 = p.get("y1");
     if (p.has("a0")) s.a0 = p.get("a0");
+    if (p.has("hw")) s.hw = p.get("hw") ? p.get("hw").split(",") : [];
     if (p.has("rt")) s.rt = p.get("rt");
     if (p.has("sh")) s.sh = p.get("sh") === "1";
     if (p.has("sort")) s.sort = p.get("sort");
@@ -109,6 +116,7 @@
     if (state.y0) p.set("y0", state.y0);
     if (state.y1) p.set("y1", state.y1);
     if (state.a0) p.set("a0", state.a0);
+    if (state.hw.length) p.set("hw", state.hw.join(","));
     if (state.rt) p.set("rt", state.rt);
     if (state.sh) p.set("sh", "1");
     if (state.sort !== d.sort) p.set("sort", state.sort);
@@ -136,6 +144,112 @@
   function saveHidden() {
     try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch { /* ignore */ }
     el.hiddenCount.textContent = hidden.size;
+  }
+
+  // ---------------------------------------------------------------------
+  // People & watched marks
+  // ---------------------------------------------------------------------
+  const titleId = (m) => `${m.kind}-${m.tmdb_id}`;
+  const watchedBy = (m) => Object.keys((watched.watched || {})[titleId(m)] || {});
+
+  function loadWatchedLocal() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(WATCHED_KEY) || "null");
+      if (raw && Array.isArray(raw.people)) return { people: raw.people, watched: raw.watched || {} };
+    } catch { /* ignore */ }
+    return { people: [], watched: {} };
+  }
+  function saveWatchedLocal() {
+    try { localStorage.setItem(WATCHED_KEY, JSON.stringify(watched)); } catch { /* ignore */ }
+  }
+
+  async function watchedRequest(path, body) {
+    if (!watchedApi) return null;
+    try {
+      const resp = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+                                         : { cache: "no-store" });
+      if (resp.status === 404 && !body) { watchedApi = false; return null; }
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        if (err && err.error) alert(err.error);
+        return null;
+      }
+      return await resp.json();
+    } catch {
+      if (!body) watchedApi = false;
+      return null;
+    }
+  }
+
+  async function loadWatched() {
+    const remote = await watchedRequest("../api/watched");
+    watched = remote && Array.isArray(remote.people) ? remote : loadWatchedLocal();
+    saveWatchedLocal();
+    renderPeople();
+  }
+
+  async function addPerson(name) {
+    name = (name || "").trim().replace(/\s+/g, " ");
+    if (!name) return;
+    if (watched.people.some((p) => p.toLowerCase() === name.toLowerCase())) return;
+    const remote = await watchedRequest("../api/people", { add: name });
+    if (remote) watched = remote; else if (!watchedApi) watched.people.push(name); else return;
+    saveWatchedLocal();
+    renderPeople();
+    refresh();
+  }
+
+  async function removePerson(name) {
+    if (!confirm(`Remove ${name}? Their watched marks are removed too.`)) return;
+    const remote = await watchedRequest("../api/people", { remove: name });
+    if (remote) watched = remote;
+    else if (!watchedApi) {
+      watched.people = watched.people.filter((p) => p !== name);
+      for (const [id, marks] of Object.entries(watched.watched)) { delete marks[name]; if (!Object.keys(marks).length) delete watched.watched[id]; }
+    } else return;
+    state.hw = state.hw.filter((p) => p !== name);
+    saveWatchedLocal();
+    renderPeople();
+    refresh();
+  }
+
+  async function toggleWatched(m, person) {
+    const id = titleId(m);
+    const now = !watchedBy(m).includes(person);
+    // optimistic update
+    const marks = watched.watched[id] || (watched.watched[id] = {});
+    if (now) marks[person] = new Date().toISOString().slice(0, 10); else delete marks[person];
+    if (!Object.keys(marks).length) delete watched.watched[id];
+    renderWatchedRow(m);
+    const remote = await watchedRequest("../api/watched", { id, person, watched: now });
+    if (remote) watched = remote;
+    saveWatchedLocal();
+    renderWatchedRow(m);
+    for (const node of document.querySelectorAll(`[data-id="${m.tmdb_id}"] .watched-line`)) node.textContent = watchedLineText(m);
+    for (const node of document.querySelectorAll(`[data-id="${m.tmdb_id}"]`)) node.classList.toggle("is-watched", watchedBy(m).length > 0);
+  }
+
+  const watchedLineText = (m) => { const w = watchedBy(m); return w.length ? `✓ Watched by ${w.join(", ")}` : ""; };
+
+  function renderPeople() {
+    el.people.innerHTML = watched.people.map((p) => `
+      <label class="check person"><input type="checkbox" name="hw" value="${escapeHtml(p)}"> Hide watched by ${escapeHtml(p)}
+        <button type="button" class="link person-remove" data-person="${escapeHtml(p)}" title="Remove ${escapeHtml(p)}">remove</button></label>`).join("");
+    $("people-hint").hidden = watched.people.length > 0;
+    for (const cb of el.people.querySelectorAll("input")) cb.checked = state.hw.includes(cb.value);
+    for (const b of el.people.querySelectorAll(".person-remove")) {
+      b.addEventListener("click", (ev) => { ev.preventDefault(); removePerson(b.dataset.person); });
+    }
+  }
+
+  function renderWatchedRow(m) {
+    const row = $("detail-watched");
+    if (!row || (el.detail.open && el.detail.dataset.id !== String(m.tmdb_id))) return;
+    if (!watched.people.length) { row.innerHTML = `<span class="lbl">Watched by: add people in the sidebar to track who has seen this.</span>`; return; }
+    const seen = watchedBy(m);
+    row.innerHTML = `<span class="lbl">Watched by</span>` + watched.people.map((p) =>
+      `<button type="button" class="person-chip" data-person="${escapeHtml(p)}" aria-pressed="${seen.includes(p)}">${seen.includes(p) ? "✓ " : ""}${escapeHtml(p)}</button>`).join("");
+    for (const b of row.querySelectorAll(".person-chip")) b.addEventListener("click", () => toggleWatched(m, b.dataset.person));
   }
 
   // ---------------------------------------------------------------------
@@ -187,9 +301,11 @@
     const a0 = parseDateBound(state.a0, false);
     const rtMax = state.rt ? Number(state.rt) : null;
 
+    const hideWatched = new Set(state.hw);
     return data.movies.filter((m) => {
       const isHidden = hidden.has(m.tmdb_id);
       if (isHidden && !state.sh) return false;
+      if (hideWatched.size && watchedBy(m).some((p) => hideWatched.has(p))) return false;
       if (svc && !m.services.some((s) => svc.has(s))) return false;
       const rt = m.rt || {};
       const hasScore = rt.critic_score != null || rt.audience_score != null;
@@ -357,7 +473,7 @@
 
   function card(m) {
     const node = document.createElement("article");
-    node.className = "card" + (hidden.has(m.tmdb_id) ? " is-hidden" : "");
+    node.className = "card" + (hidden.has(m.tmdb_id) ? " is-hidden" : "") + (watchedBy(m).length ? " is-watched" : "");
     node.tabIndex = 0;
     node.dataset.id = m.tmdb_id;
     const meta = [yearsLabel(m), lengthLabel(m)].filter(Boolean).join(" · ");
@@ -369,6 +485,7 @@
         <div class="meta">${meta}</div>
         <div class="badges">${watchBadgesHtml(m)}</div>
         <div class="scores">${criticScoreHtml(m.rt, true)}${audienceScoreHtml(m.rt, false)}</div>
+        <div class="watched-line">${watchedLineText(m)}</div>
         <div class="genres">${escapeHtml((m.genres || []).join(", "))}</div>
         <p class="overview">${escapeHtml(m.overview || "")}</p>
       </div>`;
@@ -385,7 +502,7 @@
 
   function row(m) {
     const node = document.createElement("tr");
-    node.className = "list-row" + (hidden.has(m.tmdb_id) ? " is-hidden" : "");
+    node.className = "list-row" + (hidden.has(m.tmdb_id) ? " is-hidden" : "") + (watchedBy(m).length ? " is-watched" : "");
     node.tabIndex = 0;
     node.dataset.id = m.tmdb_id;
     node.innerHTML = `
@@ -393,6 +510,7 @@
       <td class="col-title">
         <span class="title">${escapeHtml(m.title)}</span>
         <span class="sub">${[yearsLabel(m), lengthLabel(m), (m.genres || []).slice(0, 2).join(", ")].filter(Boolean).map(escapeHtml).join(" · ")}</span>
+        <span class="watched-line">${watchedLineText(m)}</span>
         <div class="badges badges-inline">${watchBadgesHtml(m)}</div>
       </td>
       <td class="col-year">${yearsLabel(m)}</td>
@@ -469,6 +587,7 @@
     links.push(`<a href="https://www.themoviedb.org/${m.kind === "tv" ? "tv" : "movie"}/${m.tmdb_id}" target="_blank" rel="noopener">TMDB ↗</a>`);
     $("detail-links").innerHTML = links.join("");
     el.detail.dataset.id = String(m.tmdb_id);
+    renderWatchedRow(m);
     el.detail.showModal();
     el.detail.querySelector(".detail-body").scrollTop = 0;
     lookupWatchLinks(m);
@@ -553,6 +672,7 @@
     el.yearMin.value = state.y0; el.yearMax.value = state.y1; el.addedMin.value = state.a0;
     el.runtimeMax.value = state.rt;
     el.showHidden.checked = state.sh;
+    for (const cb of el.people.querySelectorAll("input")) cb.checked = state.hw.includes(cb.value);
     el.sort.value = SORTS[state.sort] ? state.sort : "critic_desc";
   }
 
@@ -571,6 +691,7 @@
     state.y0 = el.yearMin.value; state.y1 = el.yearMax.value; state.a0 = el.addedMin.value;
     state.rt = el.runtimeMax.value;
     state.sh = el.showHidden.checked;
+    state.hw = [...el.people.querySelectorAll("input:checked")].map((c) => c.value);
     state.sort = el.sort.value;
     el.minCriticOut.textContent = state.mc;
     el.minAudienceOut.textContent = state.ma;
@@ -599,6 +720,8 @@
       stateToForm(); refresh();
     });
     el.clearHidden.addEventListener("click", () => { hidden.clear(); saveHidden(); refresh(); });
+    el.personAdd.addEventListener("click", () => { addPerson(el.personName.value); el.personName.value = ""; });
+    el.personName.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); addPerson(el.personName.value); el.personName.value = ""; } });
     el.loadMore.addEventListener("click", renderMore);
     if ("IntersectionObserver" in window) {
       new IntersectionObserver((entries) => {
@@ -679,6 +802,7 @@
     buildServiceChecks();
     buildGenreChecks();
     el.hiddenCount.textContent = hidden.size;
+    await loadWatched();
     state = readHash();
     stateToForm();
     wire();

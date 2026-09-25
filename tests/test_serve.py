@@ -55,6 +55,15 @@ class ServeTests(unittest.TestCase):
         self.server.server_close()
         self.tmp.cleanup()
 
+    def post(self, path, body):
+        req = urllib.request.Request(self.base + path, data=json.dumps(body).encode(), method="POST",
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return resp.status, json.loads(resp.read())
+        except urllib.error.HTTPError as err:
+            return err.code, json.loads(err.read())
+
     def get(self, path):
         try:
             with urllib.request.urlopen(self.base + path) as resp:
@@ -85,6 +94,33 @@ class ServeTests(unittest.TestCase):
         self.assertEqual(len(self.wm.calls), 1)
         cached = MovieCache(self.root / "cache", "movie").load(1)["watch_links"]["links"]
         self.assertIn("Netflix", cached)
+
+    def test_people_and_watched(self):
+        self.assertEqual(self.get("/api/watched")[1], {"people": [], "watched": {}})
+        status, body = self.post("/api/people", {"add": "Matt"})
+        self.assertEqual((status, body["people"]), (200, ["Matt"]))
+        self.assertEqual(self.post("/api/people", {"add": " deb "})[1]["people"], ["Matt", "deb"])
+        self.assertEqual(self.post("/api/people", {"add": "MATT"})[1]["people"], ["Matt", "deb"])  # case-insensitive dedupe
+        status, body = self.post("/api/watched", {"id": "movie-1", "person": "matt", "watched": True})
+        self.assertEqual(status, 200)
+        self.assertEqual(list(body["watched"]["movie-1"]), ["Matt"])
+        self.assertRegex(body["watched"]["movie-1"]["Matt"], r"^\d{4}-\d{2}-\d{2}$")
+        self.post("/api/watched", {"id": "movie-1", "person": "deb"})
+        self.post("/api/watched", {"id": "tv-7", "person": "deb"})
+        snap = self.get("/api/watched")[1]
+        self.assertEqual(sorted(snap["watched"]["movie-1"]), ["Matt", "deb"])
+        # unmark, unknown person, bad id
+        body = self.post("/api/watched", {"id": "movie-1", "person": "Matt", "watched": False})[1]
+        self.assertEqual(list(body["watched"]["movie-1"]), ["deb"])
+        self.assertEqual(self.post("/api/watched", {"id": "movie-1", "person": "Nobody"})[0], 400)
+        self.assertEqual(self.post("/api/watched", {"id": "x", "person": "Matt"})[0], 400)
+        self.assertEqual(self.post("/api/people", {})[0], 400)
+        self.assertEqual(self.post("/api/nope", {})[0], 404)
+        # removing a person drops their marks; the file is what the other app reads
+        body = self.post("/api/people", {"remove": "deb"})[1]
+        self.assertEqual(body, {"people": ["Matt"], "watched": {}})
+        self.assertTrue((self.root / "data" / "watched.json").exists())
+        self.assertEqual(self.post("/api/people", {"people": ["Deb", "Matt", "Deb"]})[1]["people"], ["Deb", "Matt"])
 
     def test_ping(self):
         status, body = self.get("/api/ping")

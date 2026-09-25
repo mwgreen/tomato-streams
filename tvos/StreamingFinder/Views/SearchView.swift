@@ -5,6 +5,7 @@ struct SearchView: View {
     @EnvironmentObject var store: CatalogStore
     @EnvironmentObject var settings: ServerSettings
     @EnvironmentObject var hidden: HiddenStore
+    @EnvironmentObject var watched: WatchedStore
     @State private var query = ""
 
     private var results: [Title] {
@@ -14,7 +15,7 @@ struct SearchView: View {
         f.minReviews = 0
         f.sort = .critic
         let all = store.titles(.movie) + store.titles(.tv)
-        return f.apply(all, hidden: hidden.ids, showHidden: settings.showHidden, hideNoScore: false, query: q)
+        return f.apply(all, hidden: hidden.ids, showHidden: settings.showHidden, hideNoScore: false, query: q, watched: watched.watched)
     }
 
     var body: some View {

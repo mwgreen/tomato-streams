@@ -121,6 +121,16 @@
       </fieldset>
 
       <fieldset>
+        <legend>Watched by</legend>
+        <div id="people" class="checks"></div>
+        <p class="hint" id="people-hint">Add the people who watch, then mark titles as watched on their detail page. Tick a name to hide what they have seen.</p>
+        <div class="row">
+          <input type="text" id="person-name" placeholder="Add a person" maxlength="40" aria-label="Person name">
+          <button type="button" class="btn btn-small" id="person-add">Add</button>
+        </div>
+      </fieldset>
+
+      <fieldset>
         <legend>Hidden titles</legend>
         <label class="check"><input type="checkbox" id="show-hidden"> Show hidden (<span id="hidden-count">0</span>)</label>
         <button type="button" class="btn btn-small" id="clear-hidden">Un-hide all</button>
@@ -194,6 +204,7 @@
       <p class="detail-added" id="detail-added"></p>
       <div class="watch-row" id="detail-watch"></div>
       <div class="detail-scores" id="detail-scores"></div>
+      <div class="watched-row" id="detail-watched"></div>
       <p id="detail-overview" class="detail-overview"></p>
       <div id="detail-trailer" class="detail-trailer"></div>
       <div class="detail-links" id="detail-links"></div>

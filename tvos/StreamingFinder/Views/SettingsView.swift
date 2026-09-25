@@ -4,6 +4,8 @@ struct SettingsView: View {
     @EnvironmentObject var settings: ServerSettings
     @EnvironmentObject var store: CatalogStore
     @EnvironmentObject var hidden: HiddenStore
+    @EnvironmentObject var watched: WatchedStore
+    @State private var newPerson = ""
     @State private var address = ""
     @State private var testResult: String?
     @State private var testing = false
@@ -37,6 +39,23 @@ struct SettingsView: View {
                     if let err = store.lastError { Text(err).foregroundStyle(.orange).font(.callout) }
                     Button(store.isRefreshing ? "Refreshing…" : "Refresh now") { Task { await store.refresh() } }.disabled(store.isRefreshing)
                 }
+                Section("People (watched by)") {
+                    ForEach(watched.people, id: \.self) { person in
+                        HStack {
+                            Text(person)
+                            Spacer()
+                            Button("Remove") { Task { await watched.removePerson(person) } }
+                        }
+                    }
+                    HStack {
+                        TextField("Add a person, e.g. Matt", text: $newPerson)
+                            .onSubmit { addPerson() }
+                        Button("Add") { addPerson() }.disabled(newPerson.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                    Text("Mark titles as watched on their page; the Movies and TV tabs can then hide what each person has seen. Shared with the web app through serve.py.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if let err = watched.lastError { Text(err).font(.caption).foregroundStyle(.orange) }
+                }
                 Section("Display") {
                     Toggle("Hide titles with no Rotten Tomatoes score", isOn: $settings.hideNoScore)
                     Toggle("Show hidden titles", isOn: $settings.showHidden)
@@ -57,6 +76,12 @@ struct SettingsView: View {
             settings.startBrowsing()
         }
         .onDisappear { settings.stopBrowsing() }
+    }
+
+    private func addPerson() {
+        let name = newPerson
+        newPerson = ""
+        Task { await watched.addPerson(name) }
     }
 
     private var allServices: [String] {

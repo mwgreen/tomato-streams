@@ -7,6 +7,11 @@ Watchmode lookups (exact "Watch on <service>" links) so the API key stays server
     python serve.py --port 9000
 
 GET /api/ping                  -> {"ok": true, ...}   (used by the Apple TV app to test the address)
+GET /api/watched               -> {"people": [...], "watched": {"movie-123": {"Matt": "2026-09-25"}}}
+POST /api/people   {"add": "Matt"} | {"remove": "Matt"} | {"people": [...]}   -> same as GET /api/watched
+POST /api/watched  {"id": "movie-123", "person": "Matt", "watched": true}     -> same as GET /api/watched
+    People and "watched by" marks are shared by the web app and the Apple TV app
+    (data/watched.json).
 GET /api/watch-links?kind=movie|tv&id=<tmdb id>
     -> {"enabled": bool, "watch_urls": {service: url}, "watch_app_urls": {service: url}}
     Looks the title up on Watchmode the first time (if WATCHMODE_API_KEY is set),
@@ -33,6 +38,7 @@ sys.path.insert(0, str(ROOT))
 from lib.cache import MovieCache  # noqa: E402
 from lib.config import ConfigError, load_config  # noqa: E402
 from lib.pipeline import SyncSummary, ensure_watch_links, match_services  # noqa: E402
+from lib.watched import WatchedError, WatchedStore  # noqa: E402
 from lib.watchmode import WatchmodeClient  # noqa: E402
 
 log = logging.getLogger("serve")
@@ -91,6 +97,7 @@ class AppContext:
         self._watchmode = watchmode
         self._watchmode_built = watchmode is not None
         self.lock = threading.Lock()
+        self.watched = WatchedStore(root / "data" / "watched.json")
 
     @property
     def config(self):
@@ -152,6 +159,9 @@ class Handler(SimpleHTTPRequestHandler):
                                   "movies": (data_dir / "movies.json").exists(),
                                   "tv": (data_dir / "tv.json").exists()})
             return
+        if url.path == "/api/watched":
+            self._send_json(200, self.ctx.watched.snapshot())
+            return
         if url.path == "/api/watch-links":
             qs = {k: v[0] for k, v in parse_qs(url.query).items()}
             try:
@@ -165,6 +175,43 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json(404, {"error": "unknown API endpoint"})
             return
         super().do_GET()
+
+    def do_POST(self):
+        url = urlparse(self.path)
+        if not url.path.startswith("/api/"):
+            self._send_json(404, {"error": "not found"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(length) or b"{}") if length else {}
+            if not isinstance(body, dict):
+                raise ValueError("body must be a JSON object")
+        except (ValueError, OSError) as exc:
+            self._send_json(400, {"error": f"bad JSON body: {exc}"})
+            return
+        try:
+            if url.path == "/api/people":
+                if "add" in body:
+                    payload = self.ctx.watched.add_person(body["add"])
+                elif "remove" in body:
+                    payload = self.ctx.watched.remove_person(body["remove"])
+                elif "people" in body:
+                    payload = self.ctx.watched.set_people(body["people"])
+                else:
+                    raise WatchedError("send {\"add\": name}, {\"remove\": name} or {\"people\": [...]}")
+            elif url.path == "/api/watched":
+                payload = self.ctx.watched.mark(body.get("id"), body.get("person"), bool(body.get("watched", True)))
+            else:
+                self._send_json(404, {"error": "unknown API endpoint"})
+                return
+        except WatchedError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        except Exception as exc:  # noqa: BLE001
+            log.exception("POST %s failed", url.path)
+            self._send_json(500, {"error": f"{type(exc).__name__}: {exc}"})
+            return
+        self._send_json(200, payload)
 
     def _send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode("utf-8")

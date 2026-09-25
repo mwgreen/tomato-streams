@@ -6,6 +6,7 @@ struct TitleCard: View {
     let title: Title
     var isNew = false
     var isHidden = false
+    var watchedBy: [String] = []
 
     static let posterWidth: CGFloat = 250
     static var posterHeight: CGFloat { posterWidth * 1.5 }
@@ -34,6 +35,10 @@ struct TitleCard: View {
                 }
                 HStack(spacing: 6) {
                     ForEach(title.services.prefix(3), id: \.self) { ServiceBadge(name: $0) }
+                }
+                if !watchedBy.isEmpty {
+                    Label(watchedBy.joined(separator: ", "), systemImage: "checkmark.circle.fill")
+                        .font(.caption).foregroundStyle(.green).lineLimit(1)
                 }
             }
             .frame(width: Self.posterWidth, alignment: .leading)

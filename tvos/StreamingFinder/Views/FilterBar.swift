@@ -6,7 +6,14 @@ struct FilterBar: View {
     @Binding var filters: Filters
     let services: [String]
     let genres: [String]
+    var people: [String] = []
     let kind: Kind
+
+    private var watchedLabel: String {
+        if filters.hideWatchedBy.isEmpty { return "Watched: showing all" }
+        if Set(people).isSubset(of: filters.hideWatchedBy) && people.count > 1 { return "Hiding watched by anyone" }
+        return "Hiding watched by " + filters.hideWatchedBy.sorted().joined(separator: ", ")
+    }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -46,6 +53,19 @@ struct FilterBar: View {
                 chipMenu(label: filters.addedWithinDays.map { "Added in last \($0) days" } ?? "Added any time", icon: "sparkles") {
                     ForEach(Array(Filters.addedSteps.enumerated()), id: \.offset) { _, d in
                         choice(d.map { "Last \($0) days" } ?? "Any time", selected: filters.addedWithinDays == d) { filters.addedWithinDays = d }
+                    }
+                }
+                if !people.isEmpty {
+                    chipMenu(label: watchedLabel, icon: "eye") {
+                        choice("Show everything", selected: filters.hideWatchedBy.isEmpty) { filters.hideWatchedBy = [] }
+                        ForEach(people, id: \.self) { person in
+                            choice("Hide watched by \(person)", selected: filters.hideWatchedBy.contains(person)) {
+                                if filters.hideWatchedBy.contains(person) { filters.hideWatchedBy.remove(person) } else { filters.hideWatchedBy.insert(person) }
+                            }
+                        }
+                        if people.count > 1 {
+                            choice("Hide watched by anyone", selected: filters.hideWatchedBy == Set(people)) { filters.hideWatchedBy = Set(people) }
+                        }
                     }
                 }
                 chipMenu(label: "Sort: \(filters.sort.label)", icon: "arrow.up.arrow.down") {

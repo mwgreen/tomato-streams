@@ -6,6 +6,7 @@ struct DetailView: View {
     let title: Title
     @EnvironmentObject var store: CatalogStore
     @EnvironmentObject var hidden: HiddenStore
+    @EnvironmentObject var watched: WatchedStore
     @State private var opening: String?
     @State private var openFailed: String?
     @FocusState private var focusedService: String?
@@ -35,6 +36,7 @@ struct DetailView: View {
                             }
                         }
                         watchButtons
+                        watchedRow
                         if let openFailed {
                             Text(openFailed).font(.callout).foregroundStyle(.orange)
                         }
@@ -99,6 +101,25 @@ struct DetailView: View {
                 Text("Not on any of your services right now.").foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// One toggle per person: "✓ Matt" when they have seen it.
+    private var watchedRow: some View {
+        HStack(spacing: 14) {
+            Text("Watched by").foregroundStyle(.secondary)
+            if watched.people.isEmpty {
+                Text("add people in Settings").font(.callout).foregroundStyle(.tertiary)
+            }
+            ForEach(watched.people, id: \.self) { person in
+                let seen = watched.isWatched(current, by: person)
+                Button { Task { await watched.toggle(current, person: person) } } label: {
+                    Label(person, systemImage: seen ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(seen ? .green : .primary)
+                }
+            }
+            if let err = watched.lastError { Text(err).font(.caption).foregroundStyle(.orange) }
+        }
+        .font(.callout)
     }
 
     private var addedLine: some View {
