@@ -194,6 +194,14 @@ service, score coverage and failures. OMDb usage is tracked in
   remembered in the browser, so reopening the page brings them back. "Reset filters"
   clears both.
 
+## Apple TV app
+
+`tvos/` holds a native SwiftUI companion app for Apple TV. It reads the same JSON from
+`serve.py`, shows the same filters as a row of remote-friendly menus above a poster
+grid, and a press on **Watch on <service>** launches that service's Apple TV app.
+Run `serve.py --host 0.0.0.0` (with `pip install zeroconf` so the Apple TV can find it),
+then see [`tvos/README.md`](tvos/README.md) for building it with Xcode.
+
 ## Scheduling weekly refreshes
 
 The cache means a weekly run only re-fetches changed availability and scores older

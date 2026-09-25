@@ -86,6 +86,12 @@ class ServeTests(unittest.TestCase):
         cached = MovieCache(self.root / "cache", "movie").load(1)["watch_links"]["links"]
         self.assertIn("Netflix", cached)
 
+    def test_ping(self):
+        status, body = self.get("/api/ping")
+        self.assertEqual(status, 200)
+        self.assertTrue(body["ok"])
+        self.assertFalse(body["movies"])
+
     def test_errors(self):
         self.assertEqual(self.get("/api/watch-links?kind=movie&id=999")[0], 404)
         self.assertEqual(self.get("/api/watch-links?kind=book&id=1")[0], 400)
