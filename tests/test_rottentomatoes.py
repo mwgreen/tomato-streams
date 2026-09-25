@@ -95,6 +95,16 @@ SEARCH_PAGE = """
 </body></html>
 """
 
+TV_SEARCH_PAGE = """
+<html><body>
+<search-page-result type="tvSeries">
+  <search-page-media-row startyear="2022" endyear="" tomatometerscore="97">
+    <a href="https://www.rottentomatoes.com/tv/severance/s01" slot="title">Severance</a>
+  </search-page-media-row>
+</search-page-result>
+</body></html>
+"""
+
 PLAIN_LINKS_SEARCH_PAGE = """
 <html><body><ul>
 <li><a href="/m/heat_1995">Heat</a> <span>1995</span></li>
@@ -178,8 +188,15 @@ class SearchTests(unittest.TestCase):
         self.assertEqual(parse_search_results(SEARCH_PAGE, "oppenheimer", 2023),
                          "https://www.rottentomatoes.com/m/oppenheimer_2023")
 
-    def test_ignores_tv_results(self):
+    def test_ignores_tv_results_for_movies(self):
         self.assertIsNone(parse_search_results(SEARCH_PAGE, "Heat", 2000))
+
+    def test_tv_search_only_matches_series(self):
+        self.assertEqual(parse_search_results(SEARCH_PAGE, "Heat", 2000, kind="tv"),
+                         "https://www.rottentomatoes.com/tv/heat_vision")
+        self.assertIsNone(parse_search_results(SEARCH_PAGE, "Heat", 1995, kind="tv"))
+        self.assertEqual(parse_search_results(TV_SEARCH_PAGE, "Severance", 2022, kind="tv"),
+                         "https://www.rottentomatoes.com/tv/severance")
 
     def test_plain_link_fallback(self):
         self.assertEqual(parse_search_results(PLAIN_LINKS_SEARCH_PAGE, "Heat", 1995),
@@ -206,7 +223,11 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(normalize_rt_url("http://rottentomatoes.com/m/heat_1995/"),
                          "https://www.rottentomatoes.com/m/heat_1995")
         self.assertEqual(normalize_rt_url("/m/heat_1995"), "https://www.rottentomatoes.com/m/heat_1995")
-        self.assertIsNone(normalize_rt_url("https://www.rottentomatoes.com/tv/show"))
+        self.assertEqual(normalize_rt_url("https://www.rottentomatoes.com/tv/severance/s02"),
+                         "https://www.rottentomatoes.com/tv/severance")
+        self.assertIsNone(normalize_rt_url("https://www.rottentomatoes.com/tv/show", kind="movie"))
+        self.assertIsNone(normalize_rt_url("https://www.rottentomatoes.com/m/heat_1995", kind="tv"))
+        self.assertIsNone(normalize_rt_url("https://www.rottentomatoes.com/celebrity/someone"))
         self.assertIsNone(normalize_rt_url("N/A"))
         self.assertIsNone(normalize_rt_url(None))
 

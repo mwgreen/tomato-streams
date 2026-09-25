@@ -32,8 +32,10 @@ BASE_URL = "https://www.rottentomatoes.com"
 SEARCH_URL = BASE_URL + "/search?search={query}"
 USER_AGENT = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
-MOVIE_PATH_RE = re.compile(r"^/m/[A-Za-z0-9_\-]+/?$")
-MOVIE_URL_RE = re.compile(r"^(?:https?://(?:www\.)?rottentomatoes\.com)?(/m/[A-Za-z0-9_\-]+)/?", re.I)
+# Matches movie (/m/slug) and TV series (/tv/slug) pages; season/episode suffixes are dropped.
+MOVIE_URL_RE = re.compile(r"^(?:https?://(?:www\.)?rottentomatoes\.com)?(/(?:m|tv)/[A-Za-z0-9_\-]+)(?:[/?#]|$)", re.I)
+KIND_PREFIX = {"movie": "/m/", "tv": "/tv/"}
+SEARCH_RESULT_TYPES = {"movie": {"movie"}, "tv": {"tvseries", "tv"}}
 
 STATUS_OK = "ok"
 STATUS_NOT_FOUND = "not_found"
@@ -74,14 +76,20 @@ class RTScores:
 # ---------------------------------------------------------------------------
 # URL / title helpers
 # ---------------------------------------------------------------------------
-def normalize_rt_url(url: str | None) -> str | None:
-    """Canonical https://www.rottentomatoes.com/m/<slug> or None."""
+def normalize_rt_url(url: str | None, kind: str | None = None) -> str | None:
+    """Canonical https://www.rottentomatoes.com/m/<slug> (or /tv/<slug>) or None.
+
+    With `kind` given, URLs of the other kind are rejected.
+    """
     if not url:
         return None
     m = MOVIE_URL_RE.match(url.strip())
     if not m:
         return None
-    return BASE_URL + m.group(1).rstrip("/")
+    path = m.group(1).rstrip("/")
+    if kind and not path.startswith(KIND_PREFIX.get(kind, "/")):
+        return None
+    return BASE_URL + path
 
 
 _ARTICLE_RE = re.compile(r"^(the|a|an)\s+")
@@ -146,29 +154,36 @@ def _clean_count(value: Any) -> str | None:
 # ---------------------------------------------------------------------------
 # Search results
 # ---------------------------------------------------------------------------
-def parse_search_results(html: str, title: str, year: int | None) -> str | None:
-    """Pick the RT movie URL whose title matches and whose year is within ±1."""
+def parse_search_results(html: str, title: str, year: int | None, kind: str = "movie") -> str | None:
+    """Pick the RT URL (movie or TV series, per `kind`) whose title matches and year is within ±1."""
     soup = BeautifulSoup(html, "html.parser")
     candidates: list[dict] = []
 
-    # Current markup: <search-page-media-row releaseyear="2023"><a slot="title" href=...>Title</a>
+    # Current markup:
+    # <search-page-result type="movie"|"tvSeries">
+    #   <search-page-media-row releaseyear="2023"><a slot="title" href=...>Title</a>
     for row in soup.select("search-page-media-row"):
+        group = row.find_parent("search-page-result")
+        group_type = str(group.get("type", "")).lower() if group else ""
+        if group_type and group_type not in SEARCH_RESULT_TYPES[kind]:
+            continue
         link = row.find("a", attrs={"slot": "title"}) or row.find("a", href=MOVIE_URL_RE)
         if not link:
             continue
-        url = normalize_rt_url(link.get("href"))
+        url = normalize_rt_url(link.get("href"), kind)
         if not url:
             continue
         candidates.append({
             "url": url,
             "title": link.get_text(" ", strip=True),
-            "year": _to_int(row.get("releaseyear") or row.get("release-year") or row.get("year")),
+            "year": _to_int(row.get("releaseyear") or row.get("startyear") or row.get("release-year")
+                            or row.get("year")),
         })
 
-    # Fallback: any /m/ link with a nearby 4-digit year.
+    # Fallback: any /m/ or /tv/ link with a nearby 4-digit year.
     if not candidates:
         for link in soup.find_all("a", href=MOVIE_URL_RE):
-            url = normalize_rt_url(link.get("href"))
+            url = normalize_rt_url(link.get("href"), kind)
             text = link.get_text(" ", strip=True)
             if not url or not text:
                 continue
@@ -336,7 +351,7 @@ def _strategy_json_ld(soup: BeautifulSoup, scores: RTScores) -> None:
             continue
         items = data if isinstance(data, list) else [data]
         for item in items:
-            if not isinstance(item, dict) or str(item.get("@type", "")).lower() != "movie":
+            if not isinstance(item, dict) or str(item.get("@type", "")).lower() not in ("movie", "tvseries"):
                 continue
             agg = item.get("aggregateRating") or {}
             if scores.critic_score is None:
@@ -345,6 +360,8 @@ def _strategy_json_ld(soup: BeautifulSoup, scores: RTScores) -> None:
                 scores.critic_count = _to_int(agg.get("reviewCount") or agg.get("ratingCount"))
             if not scores.url:
                 scores.url = normalize_rt_url(item.get("url"))
+            if item.get("@type") and str(item.get("@type")).lower() not in ("movie", "tvseries"):
+                continue
 
 
 def parse_movie_page(html: str, url: str | None = None) -> RTScores:
@@ -419,11 +436,11 @@ class RottenTomatoesClient:
             delay *= 2
         raise RTError(f"{url}: {last}")
 
-    def search(self, title: str, year: int | None) -> str | None:
+    def search(self, title: str, year: int | None, kind: str = "movie") -> str | None:
         html = self._get(SEARCH_URL.format(query=quote(title)))
         if not html:
             return None
-        return parse_search_results(html, title, year)
+        return parse_search_results(html, title, year, kind)
 
     def fetch_scores(self, url: str) -> RTScores:
         url = normalize_rt_url(url) or url

@@ -34,10 +34,11 @@ def is_fresh(timestamp: str | None, max_days: float) -> bool:
 class MovieCache:
     """JSON-file cache: one file per movie plus per-service discovery results."""
 
-    def __init__(self, root: str | Path = "cache"):
+    def __init__(self, root: str | Path = "cache", kind: str = "movie"):
         self.root = Path(root)
-        self.movies_dir = self.root / "movies"
-        self.discover_dir = self.root / "discover"
+        self.kind = kind
+        self.movies_dir = self.root / ("movies" if kind == "movie" else kind)
+        self.discover_dir = self.root / ("discover" if kind == "movie" else f"discover-{kind}")
         self.movies_dir.mkdir(parents=True, exist_ok=True)
         self.discover_dir.mkdir(parents=True, exist_ok=True)
 

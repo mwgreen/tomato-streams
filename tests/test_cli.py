@@ -23,7 +23,13 @@ RT_PAGE = """<html><body>
 
 SEARCH_PAGE = """<html><body><search-page-result type="movie">
 <search-page-media-row releaseyear="2023"><a slot="title" href="https://www.rottentomatoes.com/m/oppenheimer_2023">Oppenheimer</a></search-page-media-row>
+</search-page-result>
+<search-page-result type="tvSeries">
+<search-page-media-row startyear="2022"><a slot="title" href="https://www.rottentomatoes.com/tv/severance/s01">Severance</a></search-page-media-row>
 </search-page-result></body></html>"""
+
+TV_PAGE = """<html><body><score-board tomatometerscore="97" tomatometerstate="certified-fresh" audiencescore="89">
+<a slot="critics-count">150 Reviews</a><a slot="audience-count">5,000+ Ratings</a></score-board></body></html>"""
 
 
 class MockHandler(BaseHTTPRequestHandler):
@@ -65,6 +71,22 @@ class MockHandler(BaseHTTPRequestHandler):
                 "videos": {"results": [{"site": "YouTube", "key": "abc", "type": "Trailer", "official": True}]},
                 "watch/providers": {"results": {"US": {"link": "https://jw.example/x",
                                                        "flatrate": [{"provider_id": 1899, "provider_name": "HBO Max"}]}}}})
+        if url.path == "/tmdb/discover/tv":
+            assert qs["with_watch_monetization_types"] == "flatrate", qs
+            assert qs["vote_count.gte"] == "20", qs
+            return self._send(200, {"page": 1, "total_pages": 1, "results": [
+                {"id": 95396, "name": "Severance", "popularity": 300.0, "vote_count": 2000}]})
+        if url.path == "/tmdb/tv/95396":
+            return self._send(200, {
+                "id": 95396, "name": "Severance", "first_air_date": "2022-02-18", "last_air_date": "2022-04-08",
+                "in_production": False, "status": "Ended", "number_of_seasons": 1, "number_of_episodes": 9,
+                "episode_run_time": [55], "overview": "Innies.", "genres": [{"name": "Drama"}],
+                "poster_path": "/s.jpg", "backdrop_path": "/sb.jpg", "vote_average": 8.4, "vote_count": 2000,
+                "popularity": 300.0, "external_ids": {"imdb_id": "tt11280740"}, "videos": {"results": []},
+                "watch/providers": {"results": {"US": {"link": "https://jw.example/s",
+                                                       "flatrate": [{"provider_id": 1899, "provider_name": "HBO Max"}]}}}})
+        if url.path == "/rt/tv/severance":
+            return self._send(200, TV_PAGE, "text/html")
         if url.path == "/omdb/":
             assert qs["tomatoes"] == "true"
             return self._send(200, {"Response": "True", "tomatoURL": "N/A",
@@ -117,7 +139,7 @@ class CliTests(unittest.TestCase):
 
     def args(self, *extra):
         return ["--config", str(self.root / "config.yaml"), "--cache-dir", str(self.root / "cache"),
-                "--output", str(self.root / "data" / "movies.json"), *extra]
+                "--data-dir", str(self.root / "data"), *extra]
 
     def test_sync_end_to_end_and_cached_rerun(self):
         buf = io.StringIO()
@@ -136,14 +158,32 @@ class CliTests(unittest.TestCase):
                                    "critic_score": 94, "critic_count": 212, "certified_fresh": True,
                                    "audience_score": 88, "audience_count": "2,500+"})
         self.assertIn("both critic + audience score: 1/1", buf.getvalue())
-        self.assertIn("OMDb requests used today: 1", buf.getvalue())
+        self.assertIn("OMDb requests used today: 2", buf.getvalue())
+
+        tv = json.loads((self.root / "data" / "tv.json").read_text())
+        self.assertEqual(tv["kind"], "tv")
+        self.assertEqual(len(tv["movies"]), 1)
+        s = tv["movies"][0]
+        self.assertEqual((s["title"], s["year"], s["end_year"], s["seasons"], s["status"]),
+                         ("Severance", 2022, 2022, 1, "Ended"))
+        self.assertEqual(s["rt"], {"url": self.base + "/rt/tv/severance", "status": "ok",
+                                   "critic_score": 97, "critic_count": 150, "certified_fresh": True,
+                                   "audience_score": 89, "audience_count": "5,000+"})
+        self.assertIn("[TV series]", buf.getvalue())
         self.assertEqual(MockHandler.hits.count("/tmdb/movie/872585"), 2)  # 503 then 200
-        self.assertEqual(json.loads((self.root / "cache" / "omdb_usage.json").read_text())["count"], 1)
+        self.assertEqual(json.loads((self.root / "cache" / "omdb_usage.json").read_text())["count"], 2)
 
         MockHandler.hits = []
         with redirect_stdout(io.StringIO()):
             self.assertEqual(sync.main(self.args()), 0)
         self.assertEqual([h for h in MockHandler.hits if not h.startswith("/tmdb/watch")], [])
+
+    def test_kind_movie_only(self):
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(sync.main(self.args("--kind", "movie")), 0)
+        self.assertTrue((self.root / "data" / "movies.json").exists())
+        self.assertFalse((self.root / "data" / "tv.json").exists())
+        self.assertNotIn("/tmdb/discover/tv", MockHandler.hits)
 
     def test_list_providers(self):
         buf = io.StringIO()

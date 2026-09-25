@@ -22,6 +22,10 @@ CONFIG = textwrap.dedent("""
       - name: Hulu
         provider_ids: [15]
         enabled: false
+      - name: Apple TV
+        provider_ids: [350]
+    tv:
+      min_tmdb_vote_count: 20
     sync:
       min_tmdb_vote_count: 50
       max_pages_per_service: 2
@@ -65,19 +69,39 @@ class FakeTMDB:
             6: details(6, "No Scores", 2024, [1796], None),        # ad tier of Netflix
         }
         self.discover_by_provider = {"8|1796": [1, 3, 6], "1899": [1, 2, 4, 5], "15": [5]}
+        self.tv = {
+            7: {"id": 7, "name": "Severance", "original_name": "Severance", "first_air_date": "2022-02-18",
+                "last_air_date": "2025-03-21", "in_production": True, "status": "Returning Series",
+                "number_of_seasons": 2, "number_of_episodes": 19, "episode_run_time": [50],
+                "overview": "Work-life balance.", "genres": [{"name": "Drama"}], "poster_path": "/sev.jpg",
+                "backdrop_path": "/sevb.jpg", "vote_average": 8.4, "vote_count": 2000, "popularity": 300.0,
+                "external_ids": {"imdb_id": "tt11280740"}, "videos": {"results": []},
+                "watch/providers": {"results": {"US": {"link": "https://jw/sev",
+                                                       "flatrate": [{"provider_id": 350, "provider_name": "Apple TV+"}]}}}},
+        }
+        self.min_votes_seen = {}
 
     def list_watch_providers(self, region):
         return [{"provider_id": i, "provider_name": f"P{i}", "display_priority": i} for i in (8, 1796, 1899, 15, 1825)]
 
-    def discover_flatrate(self, region, provider_ids, min_vote_count, max_pages, sort_by="popularity.desc"):
+
+    def discover_flatrate(self, region, provider_ids, min_vote_count, max_pages, sort_by="popularity.desc",
+                          kind="movie"):
         self.calls["discover"] += 1
+        self.min_votes_seen[kind] = min_vote_count
         key = "|".join(map(str, provider_ids))
+        if kind == "tv":
+            if key == "350":
+                yield {"id": 7, "name": "Severance", "popularity": 300.0, "vote_count": 2000}
+            return
         for tmdb_id in self.discover_by_provider.get(key, []):
             m = self.movies[tmdb_id]
             yield {"id": tmdb_id, "title": m["title"], "popularity": m["popularity"], "vote_count": 500}
 
-    def movie_details(self, tmdb_id):
+    def details(self, kind, tmdb_id):
         self.calls["details"] += 1
+        if kind == "tv":
+            return self.tv.get(tmdb_id)
         if tmdb_id == 99:
             return None
         return self.movies[tmdb_id]
@@ -105,10 +129,12 @@ class FakeRT:
         self.fetches = []
         self.fail_urls = set()
 
-    def search(self, title, year):
+    def search(self, title, year, kind="movie"):
         self.searches.append((title, year))
         if title == "Oppenheimer":
             return "https://www.rottentomatoes.com/m/oppenheimer_2023"
+        if title == "Severance" and kind == "tv":
+            return "https://www.rottentomatoes.com/tv/severance"
         return None
 
     def fetch_scores(self, url):
@@ -141,11 +167,14 @@ class PipelineTests(unittest.TestCase):
         out, summary = self.run_it()
         by_title = {m["title"]: m for m in out["movies"]}
         self.assertEqual(set(by_title), {"Heat", "Oppenheimer", "No Scores"})
-        self.assertEqual(out["services"], ["Netflix", "HBO Max"])
+        self.assertEqual(out["services"], ["Netflix", "HBO Max", "Apple TV"])
+        self.assertEqual(out["kind"], "movie")
         self.assertEqual(out["ui_defaults"], {"min_critic_reviews": 20, "sort": "audience_desc"})
         self.assertEqual(out["region"], "US")
 
         heat = by_title["Heat"]
+        self.assertEqual(heat["kind"], "movie")
+        self.assertNotIn("seasons", heat)
         self.assertEqual(heat["services"], ["Netflix", "HBO Max"])
         self.assertEqual(heat["rt"]["url"], "https://www.rottentomatoes.com/m/heat_1995")
         self.assertEqual(heat["rt"]["critic_score"], 88)
@@ -170,7 +199,8 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(summary.both_scores, 2)
         self.assertEqual(summary.per_service, {"Netflix": 2, "HBO Max": 2})
         self.assertEqual(summary.rt_status, {"ok": 2, "not_found": 1})
-        self.assertEqual(self.tmdb.calls, {"discover": 2, "details": 6})
+        self.assertEqual(self.tmdb.calls, {"discover": 3, "details": 6})
+        self.assertEqual(self.tmdb.min_votes_seen, {"movie": 50})
         text = summary.format()
         self.assertIn("HBO Max", text)
         self.assertIn("both critic + audience score: 2/3", text)
@@ -182,6 +212,7 @@ class PipelineTests(unittest.TestCase):
         out, summary = self.run_it()
         self.assertEqual(self.tmdb.calls, {"discover": 0, "details": 0})
         self.assertEqual(self.rt.fetches, [])
+        self.assertEqual(self.tmdb.calls["details"], 0)
         self.assertEqual(self.rt.searches, [])
         self.assertEqual(self.omdb.calls, [])
         self.assertEqual(len(out["movies"]), 3)
@@ -193,7 +224,7 @@ class PipelineTests(unittest.TestCase):
         self.tmdb.calls = {"discover": 0, "details": 0}
         self.rt.fetches = []
         self.run_it(full=True)
-        self.assertEqual(self.tmdb.calls["discover"], 2)
+        self.assertEqual(self.tmdb.calls["discover"], 3)
         self.assertEqual(self.tmdb.calls["details"], 6)
         self.assertEqual(len(self.rt.fetches), 2)
 
@@ -240,6 +271,26 @@ class PipelineTests(unittest.TestCase):
                 yield  # noqa
         with self.assertRaises(TMDBError):
             run_sync(self.cfg, BrokenTMDB(), self.omdb, self.rt, self.cache)
+
+    def test_tv_pipeline(self):
+        tv_cache = MovieCache(Path(self.tmp.name) / "cache", "tv")
+        out, summary = run_sync(self.cfg, self.tmdb, self.omdb, self.rt, tv_cache, kind="tv")
+        self.assertEqual(out["kind"], "tv")
+        self.assertEqual(self.tmdb.min_votes_seen["tv"], 20)
+        self.assertEqual(len(out["movies"]), 1)
+        sev = out["movies"][0]
+        self.assertEqual(sev["kind"], "tv")
+        self.assertEqual(sev["title"], "Severance")
+        self.assertEqual(sev["year"], 2022)
+        self.assertIsNone(sev["end_year"])  # still in production
+        self.assertEqual((sev["seasons"], sev["episodes"], sev["runtime"]), (2, 19, 50))
+        self.assertEqual(sev["status"], "Returning Series")
+        self.assertEqual(sev["services"], ["Apple TV"])
+        self.assertEqual(sev["rt"]["url"], "https://www.rottentomatoes.com/tv/severance")
+        self.assertEqual(sev["rt"]["status"], "ok")
+        # TV and movie caches are separate directories
+        self.assertTrue((Path(self.tmp.name) / "cache" / "tv" / "7.json").exists())
+        self.assertFalse((Path(self.tmp.name) / "cache" / "movies" / "7.json").exists())
 
     def test_without_omdb_and_rt(self):
         out, summary = run_sync(self.cfg, self.tmdb, None, None, self.cache)

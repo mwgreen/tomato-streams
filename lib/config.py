@@ -33,6 +33,12 @@ class SyncSettings:
 
 
 @dataclass
+class TVSettings:
+    enabled: bool = True
+    min_tmdb_vote_count: int = 20
+
+
+@dataclass
 class UIDefaults:
     min_critic_reviews: int = 20
     sort: str = "critic_desc"
@@ -43,6 +49,7 @@ class Config:
     region: str
     services: list[Service]
     sync: SyncSettings = field(default_factory=SyncSettings)
+    tv: TVSettings = field(default_factory=TVSettings)
     ui_defaults: UIDefaults = field(default_factory=UIDefaults)
 
     @property
@@ -113,9 +120,14 @@ def load_config(path: str | Path = "config.yaml") -> Config:
         cache_days_providers=float(sync_raw.get("cache_days_providers", 2)),
         request_delay_seconds=float(sync_raw.get("request_delay_seconds", 1.0)),
     )
+    tv_raw = raw.get("tv") or {}
+    tv = TVSettings(
+        enabled=bool(tv_raw.get("enabled", True)),
+        min_tmdb_vote_count=int(tv_raw.get("min_tmdb_vote_count", 20)),
+    )
     ui_raw = raw.get("ui_defaults") or {}
     ui = UIDefaults(
         min_critic_reviews=int(ui_raw.get("min_critic_reviews", 20)),
         sort=str(ui_raw.get("sort", "critic_desc")),
     )
-    return Config(region=region, services=services, sync=sync, ui_defaults=ui)
+    return Config(region=region, services=services, sync=sync, tv=tv, ui_defaults=ui)

@@ -84,12 +84,16 @@ class TMDBClient:
         return providers
 
     def discover_flatrate(self, region: str, provider_ids: list[int], min_vote_count: int,
-                          max_pages: int, sort_by: str = "popularity.desc") -> Iterator[dict]:
-        """Movies included with a subscription (`flatrate`) on any of `provider_ids`."""
+                          max_pages: int, sort_by: str = "popularity.desc",
+                          kind: str = "movie") -> Iterator[dict]:
+        """Titles included with a subscription (`flatrate`) on any of `provider_ids`.
+
+        `kind` is "movie" or "tv" (TMDB discover endpoints share the same parameters).
+        """
         page = 1
         while page <= min(max_pages, MAX_PAGE):
             data = self._get(
-                "/discover/movie",
+                f"/discover/{kind}",
                 watch_region=region,
                 with_watch_providers="|".join(str(i) for i in provider_ids),
                 with_watch_monetization_types="flatrate",
@@ -105,9 +109,16 @@ class TMDBClient:
                 break
             page += 1
 
-    def movie_details(self, tmdb_id: int) -> dict | None:
-        return self._get(f"/movie/{int(tmdb_id)}",
+    def details(self, kind: str, tmdb_id: int) -> dict | None:
+        """Movie or TV details with providers, external ids and videos appended."""
+        return self._get(f"/{kind}/{int(tmdb_id)}",
                          append_to_response="watch/providers,external_ids,videos")
+
+    def movie_details(self, tmdb_id: int) -> dict | None:
+        return self.details("movie", tmdb_id)
+
+    def tv_details(self, tmdb_id: int) -> dict | None:
+        return self.details("tv", tmdb_id)
 
 
 # -- helpers on raw TMDB payloads ------------------------------------------
@@ -146,19 +157,43 @@ def trailer_key(details: dict) -> str | None:
     return sorted(videos, key=rank)[0]["key"]
 
 
-def normalize_details(details: dict, region: str) -> dict:
-    """Reduce a TMDB details payload to the fields the app stores."""
-    release = details.get("release_date") or ""
-    year = int(release[:4]) if release[:4].isdigit() else None
+def _year(date: str | None) -> int | None:
+    date = date or ""
+    return int(date[:4]) if date[:4].isdigit() else None
+
+
+def normalize_details(details: dict, region: str, kind: str = "movie") -> dict:
+    """Reduce a TMDB movie or TV details payload to the fields the app stores."""
+    if kind == "tv":
+        release = details.get("first_air_date") or ""
+        title = details.get("name") or details.get("original_name") or ""
+        original_title = details.get("original_name") or ""
+        run_times = [r for r in (details.get("episode_run_time") or []) if r]
+        runtime = run_times[0] if run_times else None
+        extra = {
+            "seasons": details.get("number_of_seasons"),
+            "episodes": details.get("number_of_episodes"),
+            "end_year": _year(details.get("last_air_date")) if not details.get("in_production") else None,
+            "status": details.get("status"),
+            "in_production": bool(details.get("in_production")),
+        }
+    else:
+        release = details.get("release_date") or ""
+        title = details.get("title") or details.get("original_title") or ""
+        original_title = details.get("original_title") or ""
+        runtime = details.get("runtime") or None
+        extra = {}
     return {
+        "kind": kind,
         "tmdb_id": details.get("id"),
         "imdb_id": (details.get("external_ids") or {}).get("imdb_id") or details.get("imdb_id"),
-        "title": details.get("title") or details.get("original_title") or "",
-        "original_title": details.get("original_title") or "",
-        "year": year,
+        "title": title,
+        "original_title": original_title,
+        "year": _year(release),
         "release_date": release or None,
         "overview": details.get("overview") or "",
-        "runtime": details.get("runtime") or None,
+        "runtime": runtime,
+        **extra,
         "genres": [g.get("name") for g in (details.get("genres") or []) if g.get("name")],
         "poster": image_url(details.get("poster_path"), "w342"),
         "poster_large": image_url(details.get("poster_path"), "w780"),

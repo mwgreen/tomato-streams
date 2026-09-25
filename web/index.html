@@ -2,9 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Streaming Movie Finder</title>
-<meta name="description" content="Movies included with your streaming subscriptions, with Rotten Tomatoes critic and audience scores.">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Streaming Finder">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<title>Streaming Finder</title>
+<meta name="description" content="Movies and TV series included with your streaming subscriptions, with Rotten Tomatoes critic and audience scores.">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -34,7 +41,11 @@
 
 <header class="topbar">
   <button id="toggle-filters" class="btn btn-ghost" type="button" aria-controls="sidebar" aria-expanded="false">☰ Filters</button>
-  <h1>Streaming Movie Finder</h1>
+  <h1>Streaming Finder</h1>
+  <nav class="kind-nav" aria-label="Movies or TV">
+    <a href="index.html" data-kind="movie">Movies</a>
+    <a href="index.html?kind=tv" data-kind="tv">TV Series</a>
+  </nav>
   <div class="topbar-meta">
     <span id="count" class="count">Loading…</span>
     <span id="generated" class="generated"></span>
@@ -74,7 +85,7 @@
           <input type="number" id="min-reviews" min="0" step="1" inputmode="numeric">
         </label>
         <label class="check"><input type="checkbox" id="certified"> Certified Fresh only</label>
-        <label class="check"><input type="checkbox" id="hide-no-rt" checked> Hide movies with no RT score</label>
+        <label class="check"><input type="checkbox" id="hide-no-rt" checked> Hide titles with no RT score</label>
       </fieldset>
 
       <fieldset>
@@ -90,7 +101,7 @@
           <input type="number" id="year-max" placeholder="To" min="1900" max="2100" inputmode="numeric" aria-label="Year to">
         </div>
         <label class="field">
-          <span class="label">Max runtime (minutes)</span>
+          <span class="label" id="runtime-label">Max runtime (minutes)</span>
           <input type="number" id="runtime-max" min="0" step="5" placeholder="any" inputmode="numeric">
         </label>
       </fieldset>
@@ -120,10 +131,36 @@
           <option value="title_asc">Title</option>
         </select>
       </label>
+      <div class="view-toggle" role="group" aria-label="View">
+        <button type="button" class="btn" data-view="grid" aria-pressed="true" title="Grid view">▦ Grid</button>
+        <button type="button" class="btn" data-view="list" aria-pressed="false" title="List view">☰ List</button>
+      </div>
       <span id="shown" class="shown"></span>
     </div>
+
     <div id="grid" class="grid" aria-live="polite"></div>
-    <p id="empty" class="empty" hidden>No movies match these filters.</p>
+
+    <div id="list-wrap" class="list-wrap" hidden>
+      <table id="list" class="list">
+        <thead>
+          <tr>
+            <th class="col-poster"></th>
+            <th class="col-title sortable" data-sort="title_asc">Title</th>
+            <th class="col-year sortable" data-sort="year_desc" data-sort-alt="year_asc">Year</th>
+            <th class="col-runtime" id="col-runtime">Runtime</th>
+            <th class="col-genres">Genres</th>
+            <th class="col-score sortable" data-sort="critic_desc" title="Tomatometer">Critics</th>
+            <th class="col-count sortable" data-sort="critic_count_desc" title="Critic review count">Reviews</th>
+            <th class="col-score sortable" data-sort="audience_desc" title="Audience score">Audience</th>
+            <th class="col-services">Services</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody id="list-body"></tbody>
+      </table>
+    </div>
+
+    <p id="empty" class="empty" hidden>Nothing matches these filters.</p>
     <p id="error" class="empty" hidden></p>
     <div id="sentinel" class="sentinel"></div>
     <button id="load-more" class="btn" type="button" hidden>Show more</button>
@@ -138,8 +175,8 @@
     <div class="detail-main">
       <h2 id="detail-title"></h2>
       <p class="detail-meta" id="detail-meta"></p>
+      <div class="badges badges-lg" id="detail-services"></div>
       <div class="detail-scores" id="detail-scores"></div>
-      <div class="badges" id="detail-services"></div>
       <p id="detail-overview" class="detail-overview"></p>
       <div id="detail-trailer" class="detail-trailer"></div>
       <div class="detail-links" id="detail-links"></div>

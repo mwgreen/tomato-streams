@@ -6,6 +6,7 @@ cache/
 
 # generated output (contains scraped RT data; do not redistribute)
 data/movies.json
+data/tv.json
 
 # python
 __pycache__/

@@ -1,14 +1,19 @@
-/* Streaming Movie Finder — vanilla JS front end for data/movies.json */
+/* Streaming Finder — vanilla JS front end for data/movies.json and data/tv.json */
 (function () {
   "use strict";
 
-  const DATA_URL = "../data/movies.json";
+  const KIND = new URLSearchParams(location.search).get("kind") === "tv" ? "tv" : "movie";
+  const DATA_URL = KIND === "tv" ? "../data/tv.json" : "../data/movies.json";
+  const NOUN = KIND === "tv" ? ["series", "series"] : ["movie", "movies"];
   const PAGE_SIZE = 120;
-  const HIDDEN_KEY = "smf.hidden";
+  const HIDDEN_KEY = "smf.hidden." + KIND;
+  const VIEW_KEY = "smf.view";
+  const VIEWS = ["grid", "list"];
 
   const $ = (id) => document.getElementById(id);
   const el = {
-    grid: $("grid"), empty: $("empty"), error: $("error"), count: $("count"), shown: $("shown"),
+    grid: $("grid"), listWrap: $("list-wrap"), listBody: $("list-body"), list: $("list"),
+    empty: $("empty"), error: $("error"), count: $("count"), shown: $("shown"),
     generated: $("generated"), services: $("services"), genres: $("genres"), q: $("q"),
     minCritic: $("min-critic"), minCriticOut: $("min-critic-out"),
     minAudience: $("min-audience"), minAudienceOut: $("min-audience-out"),
@@ -22,7 +27,6 @@
   };
 
   let data = { movies: [], services: [], ui_defaults: {} };
-  let allGenres = [];
   let hidden = loadHidden();
   let visible = [];     // current filtered + sorted list
   let rendered = 0;     // how many of `visible` are in the DOM
@@ -30,11 +34,15 @@
   // ---------------------------------------------------------------------
   // State <-> URL hash
   // ---------------------------------------------------------------------
+  function storedView() {
+    try { const v = localStorage.getItem(VIEW_KEY); return VIEWS.includes(v) ? v : "grid"; } catch { return "grid"; }
+  }
   const defaults = () => ({
     q: "", services: null /* null = all */, mc: 0, ma: 0,
     mr: Number(data.ui_defaults.min_critic_reviews ?? 20),
     cf: false, hn: true, g: [], y0: "", y1: "", rt: "", sh: false,
     sort: data.ui_defaults.sort || "critic_desc",
+    view: storedView(),
   });
   let state = defaults();
 
@@ -55,6 +63,7 @@
     if (p.has("rt")) s.rt = p.get("rt");
     if (p.has("sh")) s.sh = p.get("sh") === "1";
     if (p.has("sort")) s.sort = p.get("sort");
+    if (p.has("v") && VIEWS.includes(p.get("v"))) s.view = p.get("v");
     return s;
   }
 
@@ -74,6 +83,7 @@
     if (state.rt) p.set("rt", state.rt);
     if (state.sh) p.set("sh", "1");
     if (state.sort !== d.sort) p.set("sort", state.sort);
+    if (state.view !== "grid") p.set("v", state.view);
     const hash = p.toString();
     const next = hash ? "#" + hash : location.pathname + location.search;
     if (("#" + hash) !== location.hash) history.replaceState(null, "", next);
@@ -149,11 +159,27 @@
     visible = applyFilters();
     visible.sort(SORTS[state.sort] || SORTS.critic_desc);
     el.grid.replaceChildren();
+    el.listBody.replaceChildren();
     rendered = 0;
+    applyView();
     renderMore();
-    el.count.textContent = `${visible.length.toLocaleString()} movie${visible.length === 1 ? "" : "s"}`;
+    el.count.textContent = `${visible.length.toLocaleString()} ${visible.length === 1 ? NOUN[0] : NOUN[1]}`;
     el.empty.hidden = visible.length !== 0;
     writeHash();
+  }
+
+  function applyView() {
+    const list = state.view === "list";
+    el.grid.hidden = list;
+    el.listWrap.hidden = !list;
+    for (const b of document.querySelectorAll(".view-toggle [data-view]")) {
+      b.setAttribute("aria-pressed", String(b.dataset.view === state.view));
+    }
+    for (const th of el.list.querySelectorAll("th.sortable")) {
+      th.classList.toggle("sorted", th.dataset.sort === state.sort || th.dataset.sortAlt === state.sort);
+      th.classList.toggle("asc", th.dataset.sortAlt === state.sort);
+    }
+    try { localStorage.setItem(VIEW_KEY, state.view); } catch { /* ignore */ }
   }
 
   // ---------------------------------------------------------------------
@@ -162,8 +188,9 @@
   function renderMore() {
     const frag = document.createDocumentFragment();
     const end = Math.min(rendered + PAGE_SIZE, visible.length);
-    for (let i = rendered; i < end; i++) frag.appendChild(card(visible[i]));
-    el.grid.appendChild(frag);
+    const make = state.view === "list" ? row : card;
+    for (let i = rendered; i < end; i++) frag.appendChild(make(visible[i]));
+    (state.view === "list" ? el.listBody : el.grid).appendChild(frag);
     rendered = end;
     el.loadMore.hidden = rendered >= visible.length;
     el.shown.textContent = visible.length > rendered ? `showing ${rendered} of ${visible.length}` : "";
@@ -191,7 +218,27 @@
   const slug = (s) => norm(s).replace(/\+/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
   function badgesHtml(services) {
+    if (!services.length) return `<span class="badge badge-none">no service</span>`;
     return services.map((s) => `<span class="badge" data-service="${slug(s)}">${escapeHtml(s)}</span>`).join("");
+  }
+
+  /** "2016–2022", "2022–" (still running) or "1995". */
+  function yearsLabel(m) {
+    if (m.kind !== "tv") return m.year ? String(m.year) : "";
+    if (!m.year) return "";
+    if (m.end_year == null) return `${m.year}–`;
+    return m.end_year !== m.year ? `${m.year}–${m.end_year}` : String(m.year);
+  }
+
+  /** "121 min" for movies, "3 seasons · 50 min" for series. */
+  function lengthLabel(m) {
+    if (m.kind === "tv") {
+      const parts = [];
+      if (m.seasons) parts.push(`${m.seasons} season${m.seasons === 1 ? "" : "s"}`);
+      if (m.runtime) parts.push(`${m.runtime} min`);
+      return parts.join(" · ");
+    }
+    return m.runtime ? `${m.runtime} min` : "";
   }
 
   function card(m) {
@@ -199,20 +246,51 @@
     node.className = "card" + (hidden.has(m.tmdb_id) ? " is-hidden" : "");
     node.tabIndex = 0;
     node.dataset.id = m.tmdb_id;
-    const meta = [m.year, m.runtime ? `${m.runtime} min` : null].filter(Boolean).join(" · ");
+    const meta = [yearsLabel(m), lengthLabel(m)].filter(Boolean).join(" · ");
     node.innerHTML = `
       <button class="hide-btn" type="button" title="${hidden.has(m.tmdb_id) ? "Un-hide" : "Hide this title"}" aria-label="Hide">✕</button>
       <div class="poster">${m.poster ? `<img loading="lazy" src="${m.poster}" alt="">` : `<div class="no-poster">${escapeHtml(m.title)}</div>`}</div>
       <div class="card-body">
         <h3>${escapeHtml(m.title)}</h3>
         <div class="meta">${meta}</div>
-        <div class="genres">${escapeHtml((m.genres || []).join(", "))}</div>
-        <div class="scores">${criticScoreHtml(m.rt, true)}${audienceScoreHtml(m.rt, false)}</div>
-        <p class="overview">${escapeHtml(m.overview || "")}</p>
         <div class="badges">${badgesHtml(m.services)}</div>
+        <div class="scores">${criticScoreHtml(m.rt, true)}${audienceScoreHtml(m.rt, false)}</div>
+        <div class="genres">${escapeHtml((m.genres || []).join(", "))}</div>
+        <p class="overview">${escapeHtml(m.overview || "")}</p>
       </div>`;
     const img = node.querySelector(".poster img");
     if (img) img.addEventListener("error", () => img.remove(), { once: true });
+    node.querySelector(".hide-btn").addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      toggleHidden(m, node);
+    });
+    node.addEventListener("click", () => openDetail(m));
+    node.addEventListener("keydown", (ev) => { if (ev.key === "Enter") openDetail(m); });
+    return node;
+  }
+
+  function row(m) {
+    const node = document.createElement("tr");
+    node.className = "list-row" + (hidden.has(m.tmdb_id) ? " is-hidden" : "");
+    node.tabIndex = 0;
+    node.dataset.id = m.tmdb_id;
+    node.innerHTML = `
+      <td class="col-poster">${m.poster ? `<img loading="lazy" src="${m.poster}" alt="">` : `<span class="thumb-empty"></span>`}</td>
+      <td class="col-title">
+        <span class="title">${escapeHtml(m.title)}</span>
+        <span class="sub">${[yearsLabel(m), lengthLabel(m), (m.genres || []).slice(0, 2).join(", ")].filter(Boolean).map(escapeHtml).join(" · ")}</span>
+        <div class="badges badges-inline">${badgesHtml(m.services)}</div>
+      </td>
+      <td class="col-year">${yearsLabel(m)}</td>
+      <td class="col-runtime">${lengthLabel(m)}</td>
+      <td class="col-genres">${escapeHtml((m.genres || []).join(", "))}</td>
+      <td class="col-score">${criticScoreHtml(m.rt, false)}</td>
+      <td class="col-count">${m.rt.critic_count ? m.rt.critic_count.toLocaleString() : ""}</td>
+      <td class="col-score">${audienceScoreHtml(m.rt, false)}</td>
+      <td class="col-services"><div class="badges">${badgesHtml(m.services)}</div></td>
+      <td class="col-actions"><button class="hide-btn" type="button" title="${hidden.has(m.tmdb_id) ? "Un-hide" : "Hide this title"}" aria-label="Hide">✕</button></td>`;
+    const img = node.querySelector("img");
+    if (img) img.addEventListener("error", () => img.replaceWith(Object.assign(document.createElement("span"), { className: "thumb-empty" })), { once: true });
     node.querySelector(".hide-btn").addEventListener("click", (ev) => {
       ev.stopPropagation();
       toggleHidden(m, node);
@@ -229,7 +307,7 @@
       node.remove();
       visible = visible.filter((x) => x !== m);
       rendered = Math.max(0, rendered - 1);
-      el.count.textContent = `${visible.length.toLocaleString()} movies`;
+      el.count.textContent = `${visible.length.toLocaleString()} ${visible.length === 1 ? NOUN[0] : NOUN[1]}`;
       el.empty.hidden = visible.length !== 0;
     } else {
       node.classList.toggle("is-hidden", hidden.has(m.tmdb_id));
@@ -248,10 +326,11 @@
     const poster = $("detail-poster");
     poster.hidden = false;
     if (m.poster_large || m.poster) { poster.src = m.poster_large || m.poster; poster.alt = `${m.title} poster`; }
-    else { poster.removeAttribute("src"); }
+    else { poster.removeAttribute("src"); poster.hidden = true; }
     poster.onerror = () => { poster.hidden = true; };
     $("detail-title").textContent = m.title;
-    const meta = [m.year, m.runtime ? `${m.runtime} min` : null, (m.genres || []).join(", ")].filter(Boolean).join(" · ");
+    const meta = [yearsLabel(m), lengthLabel(m), m.kind === "tv" && m.episodes ? `${m.episodes} episodes` : null,
+                  m.kind === "tv" ? m.status : null, (m.genres || []).join(", ")].filter(Boolean).join(" · ");
     $("detail-meta").textContent = meta;
     const rt = m.rt || {};
     $("detail-scores").innerHTML = `
@@ -268,7 +347,7 @@
     if (m.justwatch_link) links.push(`<a href="${escapeHtml(m.justwatch_link)}" target="_blank" rel="noopener">JustWatch ↗</a>`);
     if (m.trailer_youtube_key) links.push(`<a href="https://www.youtube.com/watch?v=${encodeURIComponent(m.trailer_youtube_key)}" target="_blank" rel="noopener">Trailer on YouTube ↗</a>`);
     if (m.imdb_id) links.push(`<a href="https://www.imdb.com/title/${encodeURIComponent(m.imdb_id)}/" target="_blank" rel="noopener">IMDb ↗</a>`);
-    links.push(`<a href="https://www.themoviedb.org/movie/${m.tmdb_id}" target="_blank" rel="noopener">TMDB ↗</a>`);
+    links.push(`<a href="https://www.themoviedb.org/${m.kind === "tv" ? "tv" : "movie"}/${m.tmdb_id}" target="_blank" rel="noopener">TMDB ↗</a>`);
     $("detail-links").innerHTML = links.join("");
     el.detail.showModal();
     el.detail.querySelector(".detail-body").scrollTop = 0;
@@ -286,13 +365,13 @@
     const counts = {};
     for (const m of data.movies) for (const s of m.services) counts[s] = (counts[s] || 0) + 1;
     el.services.innerHTML = data.services.map((s) => `
-      <label class="check"><input type="checkbox" name="service" value="${escapeHtml(s)}"> ${escapeHtml(s)} <span class="n">${counts[s] || 0}</span></label>`).join("");
+      <label class="check"><input type="checkbox" name="service" value="${escapeHtml(s)}"> <span class="badge" data-service="${slug(s)}">${escapeHtml(s)}</span> <span class="n">${counts[s] || 0}</span></label>`).join("");
   }
 
   function buildGenreChecks() {
     const counts = {};
     for (const m of data.movies) for (const g of m.genres || []) counts[g] = (counts[g] || 0) + 1;
-    allGenres = Object.keys(counts).sort();
+    const allGenres = Object.keys(counts).sort();
     el.genres.innerHTML = allGenres.map((g) => `
       <label class="check"><input type="checkbox" name="genre" value="${escapeHtml(g)}"> ${escapeHtml(g)}</label>`).join("");
   }
@@ -349,13 +428,25 @@
     $("services-all").addEventListener("click", () => { el.services.querySelectorAll("input").forEach((c) => (c.checked = true)); onChange(true); });
     $("services-none").addEventListener("click", () => { el.services.querySelectorAll("input").forEach((c) => (c.checked = false)); onChange(true); });
     $("genres-clear").addEventListener("click", () => { el.genres.querySelectorAll("input").forEach((c) => (c.checked = false)); onChange(true); });
-    el.reset.addEventListener("click", () => { state = defaults(); stateToForm(); refresh(); });
+    el.reset.addEventListener("click", () => { const view = state.view; state = defaults(); state.view = view; stateToForm(); refresh(); });
     el.clearHidden.addEventListener("click", () => { hidden.clear(); saveHidden(); refresh(); });
     el.loadMore.addEventListener("click", renderMore);
     if ("IntersectionObserver" in window) {
       new IntersectionObserver((entries) => {
         if (entries.some((e) => e.isIntersecting) && rendered < visible.length) renderMore();
       }, { rootMargin: "600px" }).observe(el.sentinel);
+    }
+    // grid / list
+    for (const b of document.querySelectorAll(".view-toggle [data-view]")) {
+      b.addEventListener("click", () => { if (state.view !== b.dataset.view) { state.view = b.dataset.view; refresh(); } });
+    }
+    for (const th of el.list.querySelectorAll("th.sortable")) {
+      th.addEventListener("click", () => {
+        const primary = th.dataset.sort, alt = th.dataset.sortAlt;
+        state.sort = (alt && state.sort === primary) ? alt : primary;
+        el.sort.value = state.sort;
+        refresh();
+      });
     }
     // detail dialog
     $("detail-close").addEventListener("click", closeDetail);
@@ -366,6 +457,7 @@
       el.sidebar.classList.toggle("open", open);
       el.sidebarBackdrop.hidden = !open;
       el.toggleFilters.setAttribute("aria-expanded", String(open));
+      document.body.classList.toggle("sidebar-open", open);
     };
     el.toggleFilters.addEventListener("click", () => setSidebar(!el.sidebar.classList.contains("open")));
     el.closeFilters.addEventListener("click", () => setSidebar(false));
@@ -376,7 +468,21 @@
   // ---------------------------------------------------------------------
   // Boot
   // ---------------------------------------------------------------------
+  function applyKind() {
+    for (const a of document.querySelectorAll(".kind-nav a")) {
+      const active = a.dataset.kind === KIND;
+      a.classList.toggle("active", active);
+      if (active) a.setAttribute("aria-current", "page");
+    }
+    document.title = KIND === "tv" ? "Streaming Finder · TV Series" : "Streaming Finder · Movies";
+    if (KIND === "tv") {
+      $("runtime-label").textContent = "Max episode length (minutes)";
+      $("col-runtime").textContent = "Length";
+    }
+  }
+
   async function boot() {
+    applyKind();
     let json;
     try {
       const resp = await fetch(DATA_URL, { cache: "no-store" });
@@ -385,11 +491,12 @@
     } catch (err) {
       el.count.textContent = "";
       el.error.hidden = false;
-      el.error.innerHTML = `Could not load <code>data/movies.json</code> (${escapeHtml(err.message)}). Run <code>python sync.py</code> first, then serve with <code>python serve.py</code>.`;
+      const file = KIND === "tv" ? "data/tv.json" : "data/movies.json";
+      el.error.innerHTML = `Could not load <code>${file}</code> (${escapeHtml(err.message)}). Run <code>python sync.py</code> first, then serve with <code>python serve.py</code>.`;
       return;
     }
     data = { movies: [], services: [], ui_defaults: {}, ...json };
-    for (const m of data.movies) { m.rt = m.rt || {}; m.services = m.services || []; m.genres = m.genres || []; }
+    for (const m of data.movies) { m.rt = m.rt || {}; m.services = m.services || []; m.genres = m.genres || []; m.kind = m.kind || KIND; }
     if (data.generated_at) {
       const d = new Date(data.generated_at);
       el.generated.textContent = `data from ${isNaN(d) ? data.generated_at : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}`;

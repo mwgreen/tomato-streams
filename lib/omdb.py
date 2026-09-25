@@ -13,7 +13,7 @@ import requests
 log = logging.getLogger(__name__)
 
 BASE_URL = "https://www.omdbapi.com/"
-RT_URL_RE = re.compile(r"^https?://(?:www\.)?rottentomatoes\.com/m/[^\s?#]+", re.I)
+RT_URL_RE = re.compile(r"^https?://(?:www\.)?rottentomatoes\.com/(?:m|tv)/[^\s?#]+", re.I)
 
 
 class OMDbClient:

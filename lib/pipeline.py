@@ -67,10 +67,11 @@ def match_services(provider_ids: list[int] | None, services: list[Service]) -> l
 # Step 1: discovery
 # ---------------------------------------------------------------------------
 def discover(tmdb: TMDBClient, cache: MovieCache, cfg: Config, services: list[Service],
-             full: bool, summary: SyncSummary) -> dict[int, dict]:
+             full: bool, summary: SyncSummary, kind: str = "movie") -> dict[int, dict]:
     """Merge TMDB discover results for every service, keyed by TMDB id."""
     merged: dict[int, dict] = {}
     ok_services = 0
+    min_votes = cfg.tv.min_tmdb_vote_count if kind == "tv" else cfg.sync.min_tmdb_vote_count
     for service in services:
         key = f"{cfg.region}-{service.slug}-{'-'.join(map(str, service.provider_ids))}"
         cached = None if full else cache.load_discovery(key)
@@ -80,10 +81,9 @@ def discover(tmdb: TMDBClient, cache: MovieCache, cfg: Config, services: list[Se
         else:
             try:
                 results = []
-                for item in tmdb.discover_flatrate(cfg.region, service.provider_ids,
-                                                   cfg.sync.min_tmdb_vote_count,
-                                                   cfg.sync.max_pages_per_service):
-                    results.append({"id": item.get("id"), "title": item.get("title"),
+                for item in tmdb.discover_flatrate(cfg.region, service.provider_ids, min_votes,
+                                                   cfg.sync.max_pages_per_service, kind=kind):
+                    results.append({"id": item.get("id"), "title": item.get("title") or item.get("name"),
                                     "popularity": item.get("popularity"),
                                     "vote_count": item.get("vote_count")})
                 cache.save_discovery(key, results)
@@ -112,21 +112,21 @@ def discover(tmdb: TMDBClient, cache: MovieCache, cfg: Config, services: list[Se
 # Step 2: details
 # ---------------------------------------------------------------------------
 def ensure_details(tmdb: TMDBClient, cache: MovieCache, cfg: Config, tmdb_id: int, full: bool,
-                   summary: SyncSummary) -> dict | None:
+                   summary: SyncSummary, kind: str = "movie") -> dict | None:
     """Return the cache entry with fresh TMDB details, or None if the movie no longer exists."""
     entry = cache.load(tmdb_id)
     if (not full and entry.get("details")
             and is_fresh(entry.get("details_fetched_at"), cfg.sync.cache_days_providers)):
         summary.details_cached += 1
         return entry
-    raw = tmdb.movie_details(tmdb_id)
+    raw = tmdb.details(kind, tmdb_id)
     summary.details_fetched += 1
     if raw is None:
         entry["details"] = None
         entry["details_fetched_at"] = now_iso()
         cache.save(tmdb_id, entry)
         return None
-    entry["details"] = normalize_details(raw, cfg.region)
+    entry["details"] = normalize_details(raw, cfg.region, kind)
     entry["details_fetched_at"] = now_iso()
     cache.save(tmdb_id, entry)
     return entry
@@ -139,6 +139,7 @@ def resolve_scores(details: dict, omdb: OMDbClient | None, rt: RottenTomatoesCli
                    omdb_cached: dict | None = None) -> tuple[RTScores, dict | None]:
     """Find the RT page (OMDb tomatoURL, then RT search) and scrape it. Never raises."""
     title, year, imdb_id = details.get("title") or "", details.get("year"), details.get("imdb_id")
+    kind = details.get("kind") or "movie"
     omdb_info = omdb_cached
     if omdb_info is None and omdb is not None and omdb.enabled and imdb_id:
         raw = omdb.lookup(imdb_id)
@@ -146,13 +147,13 @@ def resolve_scores(details: dict, omdb: OMDbClient | None, rt: RottenTomatoesCli
             omdb_info = {"rt_url": extract_rt_url(raw), "critic_score": extract_rt_critic_score(raw),
                          "fetched_at": now_iso()}
     fallback_critic = (omdb_info or {}).get("critic_score")
-    url = normalize_rt_url((omdb_info or {}).get("rt_url"))
+    url = normalize_rt_url((omdb_info or {}).get("rt_url"), kind)
 
     scores = RTScores(url=url, status=STATUS_NOT_FOUND)
     if rt is not None:
         try:
             if not url:
-                url = rt.search(title, year)
+                url = rt.search(title, year, kind)
             if url:
                 scores = rt.fetch_scores(url)
             else:
@@ -208,7 +209,17 @@ def ensure_scores(entry: dict, cache: MovieCache, cfg: Config, omdb: OMDbClient 
 # Output
 # ---------------------------------------------------------------------------
 def build_movie(details: dict, services: list[str], scores: RTScores) -> dict:
+    kind = details.get("kind") or "movie"
+    tv_fields = {}
+    if kind == "tv":
+        tv_fields = {
+            "seasons": details.get("seasons"),
+            "episodes": details.get("episodes"),
+            "end_year": details.get("end_year"),
+            "status": details.get("status"),
+        }
     return {
+        "kind": kind,
         "tmdb_id": details.get("tmdb_id"),
         "imdb_id": details.get("imdb_id"),
         "title": details.get("title"),
@@ -216,6 +227,7 @@ def build_movie(details: dict, services: list[str], scores: RTScores) -> dict:
         "year": details.get("year"),
         "overview": details.get("overview"),
         "runtime": details.get("runtime"),
+        **tv_fields,
         "genres": details.get("genres") or [],
         "poster": details.get("poster"),
         "poster_large": details.get("poster_large"),
@@ -258,11 +270,12 @@ def merge_with_previous(new_movies: list[dict], previous: dict | None, synced: l
 def run_sync(cfg: Config, tmdb: TMDBClient, omdb: OMDbClient | None, rt: RottenTomatoesClient | None,
              cache: MovieCache, *, full: bool = False, limit: int | None = None,
              only_services: list[Service] | None = None, previous: dict | None = None,
-             progress_every: int = 25) -> tuple[dict, SyncSummary]:
+             progress_every: int = 25, kind: str = "movie") -> tuple[dict, SyncSummary]:
+    """Run the pipeline for one `kind` ("movie" or "tv") and return (output, summary)."""
     summary = SyncSummary()
     enabled = cfg.enabled_services
     services = only_services or enabled
-    discovered = discover(tmdb, cache, cfg, services, full, summary)
+    discovered = discover(tmdb, cache, cfg, services, full, summary, kind)
 
     ordered = sorted(discovered.items(), key=lambda kv: -(kv[1].get("popularity") or 0))
     if limit is not None:
@@ -273,7 +286,7 @@ def run_sync(cfg: Config, tmdb: TMDBClient, omdb: OMDbClient | None, rt: RottenT
     movies: list[dict] = []
     for i, (tmdb_id, _info) in enumerate(ordered, 1):
         try:
-            entry = ensure_details(tmdb, cache, cfg, tmdb_id, full, summary)
+            entry = ensure_details(tmdb, cache, cfg, tmdb_id, full, summary, kind)
         except TMDBError as exc:
             summary.failures.append(f"tmdb {tmdb_id}: {exc}")
             log.error("TMDB details for %s failed: %s", tmdb_id, exc)
@@ -312,6 +325,7 @@ def run_sync(cfg: Config, tmdb: TMDBClient, omdb: OMDbClient | None, rt: RottenT
 
     output = {
         "generated_at": now_iso(),
+        "kind": kind,
         "region": cfg.region,
         "services": [s.name for s in enabled],
         "ui_defaults": {"min_critic_reviews": cfg.ui_defaults.min_critic_reviews,

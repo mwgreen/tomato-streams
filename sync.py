@@ -35,7 +35,10 @@ log = logging.getLogger("sync")
 def parse_args(argv=None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--config", default=str(ROOT / "config.yaml"), help="path to config.yaml")
-    p.add_argument("--output", default=str(ROOT / "data" / "movies.json"), help="output JSON path")
+    p.add_argument("--data-dir", default=str(ROOT / "data"),
+                   help="output directory (writes movies.json and tv.json)")
+    p.add_argument("--kind", choices=["movie", "tv", "all"], default="all",
+                   help="what to sync: movies, TV series, or both (default: all enabled in config)")
     p.add_argument("--cache-dir", default=str(ROOT / "cache"), help="cache directory")
     p.add_argument("--list-providers", action="store_true",
                    help="print TMDB watch providers for the configured region and exit")
@@ -132,7 +135,6 @@ def main(argv=None) -> int:
 
     warn_unknown_providers(tmdb, cfg)
 
-    cache = MovieCache(args.cache_dir)
     omdb = rt = None
     if not args.skip_scores:
         omdb_key = os.environ.get("OMDB_API_KEY", "")
@@ -142,33 +144,42 @@ def main(argv=None) -> int:
             log.warning("OMDB_API_KEY not set; RT pages will be found via RT search only")
         rt = RottenTomatoesClient(delay_seconds=cfg.sync.request_delay_seconds)
 
-    output_path = Path(args.output)
-    previous = None
-    if output_path.exists():
+    kinds = ["movie", "tv"] if args.kind == "all" else [args.kind]
+    if args.kind == "all" and not cfg.tv.enabled:
+        kinds = ["movie"]
+    data_dir = Path(args.data_dir)
+    exit_code = 0
+    for kind in kinds:
+        output_path = data_dir / ("movies.json" if kind == "movie" else "tv.json")
+        label = "movies" if kind == "movie" else "TV series"
+        log.info("=== syncing %s ===", label)
+        previous = None
+        if output_path.exists():
+            try:
+                previous = json.loads(output_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                previous = None
         try:
-            previous = json.loads(output_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            previous = None
+            output, summary = run_sync(cfg, tmdb, omdb, rt, MovieCache(args.cache_dir, kind),
+                                       full=args.full, limit=args.limit, only_services=only_services,
+                                       previous=previous, kind=kind)
+        except TMDBError as exc:
+            log.error("%s", exc)
+            exit_code = 1
+            continue
+        except KeyboardInterrupt:
+            log.warning("interrupted; cached results are kept, re-run to continue")
+            return 130
 
-    try:
-        output, summary = run_sync(cfg, tmdb, omdb, rt, cache, full=args.full, limit=args.limit,
-                                   only_services=only_services, previous=previous)
-    except TMDBError as exc:
-        log.error("%s", exc)
-        return 1
-    except KeyboardInterrupt:
-        log.warning("interrupted; cached results are kept, re-run to continue")
-        return 130
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = output_path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(output, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(output_path)
-    log.info("wrote %s (%d movies)", output_path, len(output["movies"]))
-    print(summary.format())
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = output_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(output, ensure_ascii=False, indent=1), encoding="utf-8")
+        tmp.replace(output_path)
+        log.info("wrote %s (%d %s)", output_path, len(output["movies"]), label)
+        print(f"\n[{label}]" + summary.format())
     if rt is not None:
         print(f"Rotten Tomatoes requests this run: {rt.request_count}")
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

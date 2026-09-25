@@ -34,6 +34,10 @@ sync:
   cache_days_providers: 2        # re-check streaming availability after N days
   request_delay_seconds: 1.0     # politeness delay for rottentomatoes.com requests
 
+tv:
+  enabled: true                  # also sync TV series into data/tv.json
+  min_tmdb_vote_count: 20        # TV titles have fewer TMDB votes than movies
+
 ui_defaults:
   min_critic_reviews: 20         # hide titles with too few critic reviews by default
   sort: critic_desc
