@@ -64,6 +64,14 @@ class MappingTests(unittest.TestCase):
         links = map_sources_to_services(SOURCES, SERVICES, "US", include_free=True)
         self.assertEqual(links["Tubi"], {"web": "https://tubitv.com/movies/1"})
 
+    def test_free_plan_placeholder_is_not_a_link(self):
+        placeholder = "Deeplinks available for paid plans only."
+        sources = [{"name": "Netflix", "type": "sub", "region": "US",
+                    "web_url": "https://www.netflix.com/title/1", "ios_url": placeholder},
+                   {"name": "Max", "type": "sub", "region": "US", "web_url": placeholder, "ios_url": placeholder}]
+        links = map_sources_to_services(sources, SERVICES, "US")
+        self.assertEqual(links, {"Netflix": {"web": "https://www.netflix.com/title/1"}})
+
 
 class SeriesPageTests(unittest.TestCase):
     def test_rewrites(self):
@@ -125,6 +133,17 @@ class ClientTests(unittest.TestCase):
         client._usage["count"] = 95
         self.assertTrue(client.exhausted)
         self.assertIsNone(client.sources("movie", 3, "tt3"))
+
+    def test_quota_shared_between_processes(self):
+        # Two clients on the same usage file, as when serve.py and sync.py run together.
+        a = WatchmodeClient("key", self.usage, session=FakeSession([FakeResponse(200, [])] * 3))
+        b = WatchmodeClient("key", self.usage, session=FakeSession([FakeResponse(200, [])] * 3))
+        a.sources("movie", 1, "tt1")
+        a.sources("movie", 2, "tt2")
+        b.sources("movie", 3, "tt3")   # b started at 0 but must count a's two lookups
+        self.assertEqual(b.used_this_month, 3)
+        a.sources("movie", 4, "tt4")
+        self.assertEqual(json.loads(self.usage.read_text())["count"], 4)
 
     def test_disabled_without_key(self):
         client = WatchmodeClient("", self.usage, session=FakeSession([]))

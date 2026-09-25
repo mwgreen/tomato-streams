@@ -143,9 +143,11 @@ def map_sources_to_services(sources: list[dict], services: list[Service], region
         for service_name, aliases in lookup:
             if name in aliases:
                 links = out.setdefault(service_name, {})
-                if src.get("web_url") and not links.get("web"):
+                # The free plan puts "Deeplinks available for paid plans only." in the URL
+                # fields, so keep only values that look like links.
+                if "://" in (src.get("web_url") or "") and not links.get("web"):
                     links["web"] = src["web_url"]
-                if src.get("ios_url") and not links.get("ios"):
+                if "://" in (src.get("ios_url") or "") and not links.get("ios"):
                     links["ios"] = src["ios_url"]
                 break
         else:
@@ -222,6 +224,10 @@ class WatchmodeClient:
         title_id = self.title_id(kind, tmdb_id, imdb_id)
         if not self.enabled or not title_id:
             return None
+        # Another sync may share the quota file: count whichever is higher, ours or the file's.
+        on_disk = self._load_usage()
+        on_disk["count"] = max(int(on_disk.get("count", 0)), self.used_this_month)
+        self._usage = on_disk
         if self.exhausted:
             if not self._warned:
                 log.warning("Watchmode monthly quota nearly reached (%d used); skipping until next month",
