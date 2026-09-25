@@ -69,7 +69,8 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Settings")
+            // No navigationTitle: the tab bar already says Settings, and on tvOS the large
+            // title stays pinned mid-screen and overlaps the rows as the form scrolls.
         }
         .onAppear {
             address = settings.serverURL
