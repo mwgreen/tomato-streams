@@ -33,7 +33,7 @@ services:
     provider_ids: [337]
     enabled: true
   - name: Paramount+
-    provider_ids: [531, 1770]      # Paramount Plus, Paramount+ with Showtime
+    provider_ids: [2303, 2616]     # Paramount Plus Premium, Paramount Plus Essential
     enabled: true
   - name: Peacock
     provider_ids: [386, 387]       # Peacock Premium, Peacock Premium Plus
@@ -42,7 +42,7 @@ services:
   # --- other US subscription services; flip `enabled: true` for the ones you pay for ---
   - name: Starz
     provider_ids: [43]
-    enabled: false
+    enabled: true
   - name: AMC+
     provider_ids: [526]
     enabled: false
