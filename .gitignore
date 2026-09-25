@@ -24,3 +24,6 @@ DerivedData/
 
 # sync / serve logs
 *.log
+
+# macOS Finder
+.DS_Store

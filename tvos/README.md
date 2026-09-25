@@ -33,6 +33,19 @@ delete its ContentView, drag the `StreamingFinder/` folder in, and copy the
 `info.properties` keys from `project.yml` into the target's Info tab (the App Transport
 Security, Bonjour and `LSApplicationQueriesSchemes` entries matter).
 
+### Install on the Apple TV from the terminal
+
+Once Xcode is signed in (Settings → Accounts) and the Apple TV is paired (Window →
+Devices and Simulators), this builds, signs, installs and launches without the Xcode UI.
+It is also how to renew the free-team install, which expires after 7 days:
+
+```sh
+tvos/install-appletv.sh                    # default device: "Entertainment Room"
+tvos/install-appletv.sh "Living Room"      # another paired Apple TV
+```
+
+The team id and bundle id live in `project.yml`, so regenerating the project keeps them.
+
 ## Using it
 
 - **Movies / TV Series** tabs: two rows of filters above a poster grid. The first row

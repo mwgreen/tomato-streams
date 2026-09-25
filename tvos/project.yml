@@ -4,7 +4,7 @@
 # Then set your Team under Signing & Capabilities and run on an Apple TV or the simulator.
 name: StreamingFinder
 options:
-  bundleIdPrefix: com.example
+  bundleIdPrefix: com.mwgreen
   deploymentTarget:
     tvOS: "17.0"
   createIntermediateGroups: true
@@ -14,7 +14,7 @@ settings:
     SWIFT_VERSION: "5.9"
     TARGETED_DEVICE_FAMILY: "3"
     CODE_SIGN_STYLE: Automatic
-    DEVELOPMENT_TEAM: ""          # your Apple Developer team id, or set it in Xcode
+    DEVELOPMENT_TEAM: TA8B32D228  # Matt's personal team; change to yours to build elsewhere
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 targets:
   StreamingFinder:
@@ -65,5 +65,5 @@ targets:
           - com.apple.tv
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.streamingfinder
+        PRODUCT_BUNDLE_IDENTIFIER: com.mwgreen.streamingfinder
         ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
