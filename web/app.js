@@ -8,6 +8,7 @@
   const PAGE_SIZE = 120;
   const HIDDEN_KEY = "smf.hidden." + KIND;
   const VIEW_KEY = "smf.view";
+  const STATE_KEY = "smf.state";   // last filters/sort, shared by the Movies and TV pages
   const VIEWS = ["grid", "list"];
 
   const $ = (id) => document.getElementById(id);
@@ -27,6 +28,7 @@
   };
 
   let data = { movies: [], services: [], ui_defaults: {} };
+  let allGenres = [];
   let hidden = loadHidden();
   let visible = [];     // current filtered + sorted list
   let rendered = 0;     // how many of `visible` are in the DOM
@@ -46,10 +48,35 @@
   });
   let state = defaults();
 
+  function loadStoredState() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(STATE_KEY) || "null");
+      if (!raw || typeof raw !== "object") return null;
+      const s = defaults();
+      for (const k of Object.keys(s)) {
+        if (k === "view" || !(k in raw)) continue;
+        if (typeof raw[k] === typeof s[k] || (k === "services" && (raw[k] === null || Array.isArray(raw[k])))) s[k] = raw[k];
+      }
+      if (!Array.isArray(s.g)) s.g = [];
+      return s;
+    } catch { return null; }
+  }
+
+  function saveStoredState() {
+    try {
+      const { view, ...rest } = state;
+      localStorage.setItem(STATE_KEY, JSON.stringify(rest));
+    } catch { /* ignore */ }
+  }
+
   function readHash() {
     const s = defaults();
     const p = new URLSearchParams(location.hash.replace(/^#/, ""));
-    if (!p.toString()) return s;
+    if (!p.toString()) {
+      // No hash: restore the last filters used on either page.
+      const stored = loadStoredState();
+      return stored ? { ...stored, view: s.view } : s;
+    }
     if (p.has("q")) s.q = p.get("q");
     if (p.has("s")) s.services = p.get("s") ? p.get("s").split(",") : [];
     if (p.has("mc")) s.mc = num(p.get("mc"), 0);
@@ -89,6 +116,12 @@
     const hash = p.toString();
     const next = hash ? "#" + hash : location.pathname + location.search;
     if (("#" + hash) !== location.hash) history.replaceState(null, "", next);
+    saveStoredState();
+    // The Movies / TV Series links carry the current filters across.
+    for (const a of document.querySelectorAll(".kind-nav a")) {
+      const base = a.getAttribute("href").split("#")[0];
+      a.setAttribute("href", hash ? `${base}#${hash}` : base);
+    }
   }
 
   function num(v, fallback) { const n = Number(v); return Number.isFinite(n) ? n : fallback; }
@@ -148,7 +181,7 @@
   function applyFilters() {
     const q = norm(state.q).trim();
     const svc = state.services === null ? null : new Set(state.services);
-    const genres = new Set(state.g);
+    const genres = new Set(state.g.filter((g) => allGenres.includes(g)));
     const y0 = parseDateBound(state.y0, false);
     const y1 = parseDateBound(state.y1, true);
     const a0 = parseDateBound(state.a0, false);
@@ -423,7 +456,7 @@
   function buildGenreChecks() {
     const counts = {};
     for (const m of data.movies) for (const g of m.genres || []) counts[g] = (counts[g] || 0) + 1;
-    const allGenres = Object.keys(counts).sort();
+    allGenres = Object.keys(counts).sort();
     el.genres.innerHTML = allGenres.map((g) => `
       <label class="check"><input type="checkbox" name="genre" value="${escapeHtml(g)}"> ${escapeHtml(g)}</label>`).join("");
   }
@@ -454,7 +487,9 @@
     state.mr = Math.max(0, num(el.minReviews.value, 0));
     state.cf = el.certified.checked;
     state.hn = el.hideNoRt.checked;
-    state.g = [...el.genres.querySelectorAll("input:checked")].map((c) => c.value);
+    // Keep genre picks that only exist on the other page (movie vs TV genre names differ).
+    state.g = [...el.genres.querySelectorAll("input:checked")].map((c) => c.value)
+      .concat(state.g.filter((g) => !allGenres.includes(g)));
     state.y0 = el.yearMin.value; state.y1 = el.yearMax.value; state.a0 = el.addedMin.value;
     state.rt = el.runtimeMax.value;
     state.sh = el.showHidden.checked;
@@ -480,7 +515,11 @@
     $("services-all").addEventListener("click", () => { el.services.querySelectorAll("input").forEach((c) => (c.checked = true)); onChange(true); });
     $("services-none").addEventListener("click", () => { el.services.querySelectorAll("input").forEach((c) => (c.checked = false)); onChange(true); });
     $("genres-clear").addEventListener("click", () => { el.genres.querySelectorAll("input").forEach((c) => (c.checked = false)); onChange(true); });
-    el.reset.addEventListener("click", () => { const view = state.view; state = defaults(); state.view = view; stateToForm(); refresh(); });
+    el.reset.addEventListener("click", () => {
+      const view = state.view; state = defaults(); state.view = view;
+      try { localStorage.removeItem(STATE_KEY); } catch { /* ignore */ }
+      stateToForm(); refresh();
+    });
     el.clearHidden.addEventListener("click", () => { hidden.clear(); saveHidden(); refresh(); });
     el.loadMore.addEventListener("click", renderMore);
     if ("IntersectionObserver" in window) {

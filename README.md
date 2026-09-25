@@ -155,8 +155,10 @@ service, score coverage and failures. OMDb usage is tracked in
 - Click a card for the backdrop, full description, trailer and links to Rotten Tomatoes
   and JustWatch. The × on a card hides a title (stored in your browser); toggle
   "Show hidden" to bring them back.
-- Filter, sort and view state lives in the URL hash, so views can be bookmarked; the
-  grid/list choice is also remembered in the browser.
+- Filter, sort and view state lives in the URL hash, so views can be bookmarked. The
+  Movies / TV Series tabs carry the current filters across, and the last selections are
+  remembered in the browser, so reopening the page brings them back. "Reset filters"
+  clears both.
 
 ## Scheduling weekly refreshes
 
