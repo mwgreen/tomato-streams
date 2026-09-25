@@ -1,0 +1,39 @@
+region: US
+
+# Add or remove services here. `enabled: false` hides a service without deleting it.
+# provider_ids are TMDB watch-provider IDs. A service can have several
+# (e.g. ad-supported tiers). Verify IDs with: python sync.py --list-providers
+#
+# Only the exact IDs listed here are matched. Amazon/Apple "Channel" variants
+# (e.g. "HBO Max Amazon Channel") are separate providers and are excluded
+# unless you add their IDs.
+services:
+  - name: Netflix
+    provider_ids: [8, 1796]        # Netflix, Netflix Standard with Ads
+    enabled: true
+  - name: Prime Video
+    provider_ids: [9, 2100]        # Amazon Prime Video, Prime Video with Ads
+    enabled: true
+  - name: Apple TV
+    provider_ids: [350]            # Apple TV+
+    enabled: true
+  - name: HBO Max
+    provider_ids: [1899]
+    enabled: true
+  - name: Hulu
+    provider_ids: [15]
+    enabled: true
+  - name: Disney+
+    provider_ids: [337]
+    enabled: true
+
+sync:
+  min_tmdb_vote_count: 50        # skip ultra-obscure titles at discovery time
+  max_pages_per_service: 50      # TMDB pages of 20 results each
+  cache_days_scores: 7           # re-fetch RT/OMDb scores after N days
+  cache_days_providers: 2        # re-check streaming availability after N days
+  request_delay_seconds: 1.0     # politeness delay for rottentomatoes.com requests
+
+ui_defaults:
+  min_critic_reviews: 20         # hide titles with too few critic reviews by default
+  sort: critic_desc

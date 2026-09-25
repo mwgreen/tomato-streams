@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Streaming Movie Finder</title>
+<meta name="description" content="Movies included with your streaming subscriptions, with Rotten Tomatoes critic and audience scores.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="icon-tomato" viewBox="0 0 24 24">
+    <path fill="#fa320a" d="M12 6.5c-4.6 0-8 3-8 7.2C4 18 7.6 21 12 21s8-3 8-7.3c0-4.2-3.4-7.2-8-7.2z"/>
+    <path fill="#00912d" d="M12.1 3c-.6 1.1-.5 2.2 0 3.1-1.4-.5-2.9-.3-4 .6 1.4.4 2.6 1.3 3.3 2.5.7-1.2 1.9-2.1 3.3-2.5-1.1-.9-2.6-1.1-4-.6.9-.6 1.5-1.7 1.4-3.1z"/>
+  </symbol>
+  <symbol id="icon-splat" viewBox="0 0 24 24">
+    <path fill="#0ac855" d="M12 2.5l1.8 3.9 4.1-1.6-.9 4.3 4.2 1.3-3.4 2.8 2.6 3.5-4.3.3.3 4.4-3.6-2.5-2.6 3.5-1.3-4.2-4.3.9 2-3.9-3.9-2 3.9-2-1.5-4.1 4.2 1.2z"/>
+  </symbol>
+  <symbol id="icon-certified" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10.5" fill="#fa320a"/>
+    <path fill="#fff" d="M7 12.5l3.2 3.2L17 9.2l-1.5-1.5-5.3 5.3-1.7-1.7z"/>
+  </symbol>
+  <symbol id="icon-popcorn" viewBox="0 0 24 24">
+    <path fill="#fff5d6" d="M6 8.5a2.4 2.4 0 013.2-2.9 2.5 2.5 0 015.5 0A2.4 2.4 0 0118 8.5H6z"/>
+    <path fill="#fa320a" d="M5.5 9.5h13l-1.4 11H6.9z"/>
+    <path fill="#fff" d="M9.3 9.5h2l-.4 11h-2zM12.7 9.5h2l.4 11h-2z"/>
+  </symbol>
+  <symbol id="icon-spilled" viewBox="0 0 24 24">
+    <path fill="#0ac855" d="M4 10.5h14l-1.3 9H5.3z"/>
+    <path fill="#fff" d="M8 10.5h2l-.3 9h-2zM11.5 10.5h2l.3 9h-2z"/>
+    <path fill="#fff5d6" d="M14.5 5.2a2 2 0 013.4 1.5 2 2 0 012 2.5 2 2 0 01-2.7 1.1l-1.6-1.6a2.3 2.3 0 01-1.1-3.5z"/>
+  </symbol>
+</svg>
+
+<header class="topbar">
+  <button id="toggle-filters" class="btn btn-ghost" type="button" aria-controls="sidebar" aria-expanded="false">☰ Filters</button>
+  <h1>Streaming Movie Finder</h1>
+  <div class="topbar-meta">
+    <span id="count" class="count">Loading…</span>
+    <span id="generated" class="generated"></span>
+  </div>
+</header>
+
+<div class="layout">
+  <aside id="sidebar" class="sidebar" aria-label="Filters">
+    <form id="filters" autocomplete="off" onsubmit="return false">
+      <div class="sidebar-head">
+        <strong>Filters</strong>
+        <button id="close-filters" class="btn btn-ghost" type="button" aria-label="Close filters">✕</button>
+      </div>
+
+      <label class="field">
+        <span class="label">Search title</span>
+        <input type="search" id="q" placeholder="e.g. heat">
+      </label>
+
+      <fieldset>
+        <legend>Services <button type="button" class="link" id="services-all">all</button> · <button type="button" class="link" id="services-none">none</button></legend>
+        <div id="services" class="checks"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Rotten Tomatoes</legend>
+        <label class="field">
+          <span class="label">Min critic score <output id="min-critic-out">0</output></span>
+          <input type="range" id="min-critic" min="0" max="100" step="5" value="0">
+        </label>
+        <label class="field">
+          <span class="label">Min audience score <output id="min-audience-out">0</output></span>
+          <input type="range" id="min-audience" min="0" max="100" step="5" value="0">
+        </label>
+        <label class="field">
+          <span class="label">Min critic reviews</span>
+          <input type="number" id="min-reviews" min="0" step="1" inputmode="numeric">
+        </label>
+        <label class="check"><input type="checkbox" id="certified"> Certified Fresh only</label>
+        <label class="check"><input type="checkbox" id="hide-no-rt" checked> Hide movies with no RT score</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Genres <button type="button" class="link" id="genres-clear">clear</button></legend>
+        <div id="genres" class="checks checks-compact"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Year &amp; runtime</legend>
+        <div class="row">
+          <input type="number" id="year-min" placeholder="From" min="1900" max="2100" inputmode="numeric" aria-label="Year from">
+          <span>–</span>
+          <input type="number" id="year-max" placeholder="To" min="1900" max="2100" inputmode="numeric" aria-label="Year to">
+        </div>
+        <label class="field">
+          <span class="label">Max runtime (minutes)</span>
+          <input type="number" id="runtime-max" min="0" step="5" placeholder="any" inputmode="numeric">
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Hidden titles</legend>
+        <label class="check"><input type="checkbox" id="show-hidden"> Show hidden (<span id="hidden-count">0</span>)</label>
+        <button type="button" class="btn btn-small" id="clear-hidden">Un-hide all</button>
+      </fieldset>
+
+      <button type="button" class="btn" id="reset">Reset filters</button>
+    </form>
+  </aside>
+  <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
+
+  <main class="content">
+    <div class="toolbar">
+      <label class="sort">
+        <span>Sort by</span>
+        <select id="sort">
+          <option value="critic_desc">Critic score</option>
+          <option value="audience_desc">Audience score</option>
+          <option value="combined_desc">Combined average</option>
+          <option value="critic_count_desc">Critic review count</option>
+          <option value="year_desc">Year (newest)</option>
+          <option value="year_asc">Year (oldest)</option>
+          <option value="title_asc">Title</option>
+        </select>
+      </label>
+      <span id="shown" class="shown"></span>
+    </div>
+    <div id="grid" class="grid" aria-live="polite"></div>
+    <p id="empty" class="empty" hidden>No movies match these filters.</p>
+    <p id="error" class="empty" hidden></p>
+    <div id="sentinel" class="sentinel"></div>
+    <button id="load-more" class="btn" type="button" hidden>Show more</button>
+  </main>
+</div>
+
+<dialog id="detail" class="detail" aria-labelledby="detail-title">
+  <button class="detail-close btn btn-ghost" id="detail-close" type="button" aria-label="Close">✕</button>
+  <div class="detail-backdrop" id="detail-backdrop"></div>
+  <div class="detail-body">
+    <img id="detail-poster" class="detail-poster" alt="">
+    <div class="detail-main">
+      <h2 id="detail-title"></h2>
+      <p class="detail-meta" id="detail-meta"></p>
+      <div class="detail-scores" id="detail-scores"></div>
+      <div class="badges" id="detail-services"></div>
+      <p id="detail-overview" class="detail-overview"></p>
+      <div id="detail-trailer" class="detail-trailer"></div>
+      <div class="detail-links" id="detail-links"></div>
+    </div>
+  </div>
+</dialog>
+
+<footer class="footer">
+  <p>This product uses the TMDB API but is not endorsed or certified by TMDB. Streaming availability data provided by <a href="https://www.justwatch.com/" rel="noopener" target="_blank">JustWatch</a>. Scores from <a href="https://www.rottentomatoes.com/" rel="noopener" target="_blank">Rotten Tomatoes</a>. Personal use only.</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

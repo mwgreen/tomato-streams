@@ -1,0 +1,14 @@
+# secrets
+.env
+
+# per-movie lookup cache and OMDb usage counter
+cache/
+
+# generated output (contains scraped RT data; do not redistribute)
+data/movies.json
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
