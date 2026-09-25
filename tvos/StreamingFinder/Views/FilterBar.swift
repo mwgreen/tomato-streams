@@ -9,6 +9,15 @@ struct FilterBar: View {
     var people: [String] = []
     let kind: Kind
 
+    private var servicesLabel: String {
+        let picked = services.filter { filters.services.contains($0) }   // keep config order
+        switch picked.count {
+        case 0: return "All services"
+        case 1, 2: return picked.joined(separator: ", ")
+        default: return "\(picked.count) services"
+        }
+    }
+
     private var watchedLabel: String {
         if filters.hideWatchedBy.isEmpty { return "Watched: showing all" }
         if Set(people).isSubset(of: filters.hideWatchedBy) && people.count > 1 { return "Hiding watched by anyone" }
@@ -18,10 +27,14 @@ struct FilterBar: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 16) {
-                chipMenu(label: filters.service ?? "All services", icon: "tv") {
-                    choice("All services", selected: filters.service == nil) { filters.service = nil }
+                // Multi-select: each service toggles; "All services" clears. The menu closes after
+                // a pick, so choosing two services is two clicks, same as the web app's checkboxes.
+                chipMenu(label: servicesLabel, icon: "tv") {
+                    choice("All services", selected: filters.services.isEmpty) { filters.services = [] }
                     ForEach(services, id: \.self) { s in
-                        choice(s, selected: filters.service == s) { filters.service = s }
+                        choice(s, selected: filters.services.contains(s)) {
+                            if filters.services.contains(s) { filters.services.remove(s) } else { filters.services.insert(s) }
+                        }
                     }
                 }
                 chipMenu(label: filters.minCritic == 0 ? "Any critic score" : "Critics ≥ \(filters.minCritic)%", icon: "leaf") {

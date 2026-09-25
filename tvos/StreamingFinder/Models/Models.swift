@@ -194,7 +194,7 @@ enum SortKey: String, CaseIterable, Codable, Identifiable {
 
 /// Browse filters, one set per kind, persisted in UserDefaults.
 struct Filters: Codable, Equatable {
-    var service: String? = nil          // nil = all services
+    var services: Set<String> = []      // empty = all services; otherwise any of these
     var minCritic: Int = 0
     var minAudience: Int = 0
     var minReviews: Int = 20
@@ -227,7 +227,7 @@ struct Filters: Codable, Equatable {
     func apply(_ titles: [Title], hidden: Set<String>, showHidden: Bool, hideNoScore: Bool,
                query: String = "", watched: [String: [String: String]] = [:]) -> [Title] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
-        let onlyService: Set<String>? = service.map { [$0] }
+        let onlyService: Set<String>? = services.isEmpty ? nil : services
         let yearKey = yearFrom.map { "\($0)-01-01" }
         let addedKeyMin: String? = addedWithinDays.flatMap { days in
             Calendar.current.date(byAdding: .day, value: -days, to: Date()).map(Self.isoDay)
@@ -235,7 +235,7 @@ struct Filters: Codable, Equatable {
         var out = titles.filter { t in
             if hidden.contains(t.id) && !showHidden { return false }
             if !hideWatchedBy.isEmpty, let marks = watched[t.id], marks.keys.contains(where: { hideWatchedBy.contains($0) }) { return false }
-            if let service, !t.services.contains(service) { return false }
+            if !services.isEmpty, !t.services.contains(where: { services.contains($0) }) { return false }
             if hideNoScore && !t.rt.hasScores { return false }
             if minCritic > 0 && (t.rt.criticScore ?? -1) < minCritic { return false }
             if minAudience > 0 && (t.rt.audienceScore ?? -1) < minAudience { return false }

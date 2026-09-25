@@ -35,7 +35,7 @@ struct BrowseView: View {
                         if store.isRefreshing { ProgressView().scaleEffect(0.7) }
                     }
                     .font(.callout)
-                    TitleGrid(titles: titles, trackingSince: catalog?.trackingSince, selectedService: filters.service)
+                    TitleGrid(titles: titles, trackingSince: catalog?.trackingSince, selectedServices: filters.services)
                     if titles.isEmpty {
                         Text(store.titles(kind).isEmpty ? "Nothing loaded yet." : "Nothing matches these filters.")
                             .foregroundStyle(.secondary).padding(.top, 80).frame(maxWidth: .infinity)
@@ -53,7 +53,7 @@ struct BrowseView: View {
 struct TitleGrid: View {
     let titles: [Title]
     var trackingSince: String?
-    var selectedService: String?
+    var selectedServices: Set<String> = []
     @EnvironmentObject var hidden: HiddenStore
     @EnvironmentObject var watched: WatchedStore
 
@@ -72,7 +72,7 @@ struct TitleGrid: View {
 
     private func isNew(_ t: Title) -> Bool {
         guard let since = trackingSince,
-              let added = t.addedKey(services: selectedService.map { [$0] }) else { return false }
+              let added = t.addedKey(services: selectedServices.isEmpty ? nil : selectedServices) else { return false }
         return added > since && added >= thirtyDaysAgo
     }
 }

@@ -35,9 +35,11 @@ Security, Bonjour and `LSApplicationQueriesSchemes` entries matter).
 
 ## Using it
 
-- **Movies / TV Series** tabs: a row of filter chips (service, minimum critic and
-  audience score, Certified Fresh, genre, year, recently added, sort) above a poster
-  grid. Each chip is a menu: click to open, click to pick. Filters are remembered.
+- **Movies / TV Series** tabs: a row of filter chips (services, minimum critic and
+  audience score, Certified Fresh, genre, year, recently added, watched, sort) above a
+  poster grid. Each chip is a menu: click to open, click to pick. The services and
+  watched menus are multi-select: each pick toggles an entry, "All services" clears.
+  Filters are remembered.
 - **Poster** → the title page: scores, description, where it is, and a **Watch on**
   button per service. The first Watch button has focus when the page opens, so
   Play → Play gets you into the show.
