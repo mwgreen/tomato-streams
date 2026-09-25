@@ -56,6 +56,60 @@ SERVICE_ALIASES: dict[str, list[str]] = {
 SUBSCRIPTION_TYPES = {"sub", "subscription"}
 FREE_TYPES = {"free"}
 
+# For TV series Watchmode's link often points at an episode (which autoplays) rather
+# than the show page. Per service (normalized name): rewrite rules that turn an episode
+# URL into the show page, and "episode" patterns that cannot be rewritten, in which case
+# the link is dropped so the UI falls back to the service's search (which lands on the
+# show). Edit here when a service changes its URL layout.
+SERIES_URL_RULES: dict[str, dict] = {
+    "netflix": {  # netflix.com/title/<episode id> resolves to the show page
+        "rewrite": [(r"^(https?://(?:www\.)?netflix\.com)/watch/(\d+).*$", r"\1/title/\2")],
+    },
+    "paramount+": {  # /shows/<slug>/video/<id>/... -> /shows/<slug>/
+        "rewrite": [(r"^(https?://(?:www\.)?paramountplus\.com/shows/[^/]+)/video/.*$", r"\1/")],
+    },
+    "hulu": {"episode": [r"/watch/"]},                       # show pages are /series/<slug>
+    "hbo max": {"episode": [r"/video/watch/", r"/play/"]},   # show pages are /show/<id>
+    "disney+": {"episode": [r"/video/", r"/play/"]},         # show pages are /series/<slug>/<id>
+    "apple tv": {"episode": [r"/episode/"]},                 # show pages are /show/<slug>/<id>
+    "peacock": {"episode": [r"/watch/playback/"]},           # show pages are /watch/asset/tv/...
+    "prime video": {"episode": [r"/watch/"]},                # /gp/video/detail/<asin> shows the season
+    "starz": {"episode": [r"/videos/"]},
+    "amc+": {"episode": [r"/watch/"]},
+}
+
+
+def series_page_url(service_name: str, url: str | None) -> str | None:
+    """Turn an episode link into the show page where possible; None if it is an episode
+    link that cannot be rewritten (caller falls back to search). Show-page links pass through."""
+    if not url:
+        return None
+    rules = SERIES_URL_RULES.get(normalize_name(service_name)) or {}
+    for pattern, repl in rules.get("rewrite", []):
+        new = re.sub(pattern, repl, url)
+        if new != url:
+            return new
+    for pattern in rules.get("episode", []):
+        if re.search(pattern, url):
+            return None
+    return url
+
+
+def links_for_kind(links: dict[str, dict], kind: str) -> dict[str, dict]:
+    """Apply the series-page rules to a {service: {"web", "ios"}} map for TV titles."""
+    if kind != "tv":
+        return links
+    out: dict[str, dict] = {}
+    for service, entry in (links or {}).items():
+        web = series_page_url(service, entry.get("web"))
+        if web is None:
+            continue  # episode link with no show-page equivalent: let the UI use search
+        fixed = dict(entry, web=web)
+        if web != entry.get("web"):
+            fixed.pop("ios", None)  # the deep link would still be the episode
+        out[service] = fixed
+    return out
+
 
 def normalize_name(name: str) -> str:
     n = (name or "").lower().strip()

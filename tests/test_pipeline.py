@@ -345,6 +345,26 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaises(TMDBError):
             run_sync(self.cfg, BrokenTMDB(), self.omdb, self.rt, self.cache)
 
+    def test_tv_watch_links_use_show_pages(self):
+        class TVWatchmode(FakeWatchmode):
+            def sources(self, kind, tmdb_id, imdb_id, region="US"):
+                self.calls.append((kind, tmdb_id, imdb_id))
+                return [{"name": "Apple TV+", "type": "sub", "region": "US",
+                         "web_url": "https://tv.apple.com/us/episode/good-news/umc.cmc.1", "ios_url": "tv://episode"}]
+        tv_cache = MovieCache(Path(self.tmp.name) / "cache", "tv")
+        wm = TVWatchmode()
+        out, _ = run_sync(self.cfg, self.tmdb, self.omdb, self.rt, tv_cache, kind="tv", watchmode=wm)
+        sev = out["movies"][0]
+        self.assertEqual(sev["watch_urls"], {})   # episode link dropped -> UI searches Apple TV for the show
+        self.assertEqual(wm.calls, [("tv", 7, "tt11280740")])
+        # a cached Netflix episode link is rewritten on the way out without another lookup
+        entry = tv_cache.load(7)
+        entry["watch_links"]["links"]["Apple TV"] = {"web": "https://tv.apple.com/us/show/severance/umc.cmc.2"}
+        tv_cache.save(7, entry)
+        out, _ = run_sync(self.cfg, self.tmdb, self.omdb, self.rt, tv_cache, kind="tv", watchmode=wm)
+        self.assertEqual(out["movies"][0]["watch_urls"], {"Apple TV": "https://tv.apple.com/us/show/severance/umc.cmc.2"})
+        self.assertEqual(len(wm.calls), 1)
+
     def test_tv_pipeline(self):
         tv_cache = MovieCache(Path(self.tmp.name) / "cache", "tv")
         out, summary = run_sync(self.cfg, self.tmdb, self.omdb, self.rt, tv_cache, kind="tv")

@@ -11,7 +11,7 @@ from lib.omdb import OMDbClient, extract_rt_critic_score, extract_rt_url
 from lib.rottentomatoes import (STATUS_ERROR, STATUS_NOT_FOUND, STATUS_OK, RTError, RottenTomatoesClient,
                                 RTScores, normalize_rt_url)
 from lib.tmdb import TMDBClient, TMDBError, normalize_details
-from lib.watchmode import WatchmodeClient, map_sources_to_services
+from lib.watchmode import WatchmodeClient, links_for_kind, map_sources_to_services
 
 log = logging.getLogger(__name__)
 
@@ -222,29 +222,36 @@ def ensure_scores(entry: dict, cache: MovieCache, cfg: Config, omdb: OMDbClient 
 def ensure_watch_links(entry: dict, cache: MovieCache, cfg: Config, watchmode: WatchmodeClient | None,
                        carried: list[str], services: list[Service], full: bool,
                        summary: SyncSummary) -> dict:
-    """{service: {"web": url, "ios": url}} for the services carrying this title, cached."""
+    """{service: {"web": url, "ios": url}} for the services carrying this title, cached.
+
+    For TV titles episode links are rewritten to the show page (or dropped) on the way out,
+    so cached results benefit from rule fixes without a new lookup."""
+    kind = entry["details"].get("kind") or "movie"
+
+    def out(links: dict) -> dict:
+        return links_for_kind({k: v for k, v in links.items() if k in carried}, kind)
+
     cached = entry.get("watch_links") or {}
     links = cached.get("links") or {}
     if watchmode is None or not watchmode.enabled:
-        return {k: v for k, v in links.items() if k in carried}
+        return out(links)
     missing = [s for s in carried if s not in links]
     fresh = not full and is_fresh(cached.get("fetched_at"), cfg.sync.cache_days_watch_links)
     if fresh and not missing:
-        return {k: v for k, v in links.items() if k in carried}
+        return out(links)
     if fresh and missing and cached.get("checked_services") and set(missing) <= set(cached["checked_services"]):
-        return {k: v for k, v in links.items() if k in carried}  # already looked, Watchmode had nothing
+        return out(links)  # already looked, Watchmode had nothing
 
     details = entry["details"]
-    sources = watchmode.sources(details.get("kind") or "movie", details.get("tmdb_id"), details.get("imdb_id"),
-                                cfg.region)
+    sources = watchmode.sources(kind, details.get("tmdb_id"), details.get("imdb_id"), cfg.region)
     if sources is None:
-        return {k: v for k, v in links.items() if k in carried}
+        return out(links)
     summary.watch_links_fetched += 1
     include_free = "free" in cfg.sync.monetization_types
     new_links = map_sources_to_services(sources, services, cfg.region, include_free=include_free)
     entry["watch_links"] = {"links": new_links, "fetched_at": now_iso(), "checked_services": sorted(carried)}
     cache.save(entry["tmdb_id"], entry)
-    return {k: v for k, v in new_links.items() if k in carried}
+    return out(new_links)
 
 
 # ---------------------------------------------------------------------------

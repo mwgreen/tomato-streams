@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from lib.config import Service
-from lib.watchmode import WatchmodeClient, map_sources_to_services, normalize_name
+from lib.watchmode import WatchmodeClient, links_for_kind, map_sources_to_services, normalize_name, series_page_url
 
 
 class FakeResponse:
@@ -63,6 +63,38 @@ class MappingTests(unittest.TestCase):
     def test_free_sources_when_enabled(self):
         links = map_sources_to_services(SOURCES, SERVICES, "US", include_free=True)
         self.assertEqual(links["Tubi"], {"web": "https://tubitv.com/movies/1"})
+
+
+class SeriesPageTests(unittest.TestCase):
+    def test_rewrites(self):
+        self.assertEqual(series_page_url("Netflix", "https://www.netflix.com/watch/80057281?trackId=1"),
+                         "https://www.netflix.com/title/80057281")
+        self.assertEqual(series_page_url("Netflix", "https://www.netflix.com/title/80057281"),
+                         "https://www.netflix.com/title/80057281")
+        self.assertEqual(series_page_url("Paramount+", "https://www.paramountplus.com/shows/star-trek/video/abc123/pilot/"),
+                         "https://www.paramountplus.com/shows/star-trek/")
+
+    def test_episode_links_dropped_show_links_kept(self):
+        self.assertIsNone(series_page_url("Hulu", "https://www.hulu.com/watch/0000-1111"))
+        self.assertEqual(series_page_url("Hulu", "https://www.hulu.com/series/the-bear-abc"), "https://www.hulu.com/series/the-bear-abc")
+        self.assertIsNone(series_page_url("HBO Max", "https://play.max.com/video/watch/abc/def"))
+        self.assertEqual(series_page_url("HBO Max", "https://play.max.com/show/abc"), "https://play.max.com/show/abc")
+        self.assertIsNone(series_page_url("Disney+", "https://www.disneyplus.com/video/abc"))
+        self.assertIsNone(series_page_url("Apple TV", "https://tv.apple.com/us/episode/pilot/umc.cmc.1"))
+        self.assertEqual(series_page_url("Apple TV", "https://tv.apple.com/us/show/severance/umc.cmc.2"),
+                         "https://tv.apple.com/us/show/severance/umc.cmc.2")
+        self.assertIsNone(series_page_url("Peacock", "https://www.peacocktv.com/watch/playback/vod/abc"))
+        self.assertEqual(series_page_url("Unknown Service", "https://x.example/watch/1"), "https://x.example/watch/1")
+        self.assertIsNone(series_page_url("Netflix", None))
+
+    def test_links_for_kind(self):
+        links = {"Netflix": {"web": "https://www.netflix.com/watch/1", "ios": "nflx://www.netflix.com/watch/1"},
+                 "Hulu": {"web": "https://www.hulu.com/watch/x", "ios": "hulu://watch/x"},
+                 "Apple TV": {"web": "https://tv.apple.com/us/show/s/umc.cmc.2", "ios": "tv://show"}}
+        self.assertEqual(links_for_kind(links, "movie"), links)
+        tv = links_for_kind(links, "tv")
+        self.assertEqual(tv, {"Netflix": {"web": "https://www.netflix.com/title/1"},
+                              "Apple TV": {"web": "https://tv.apple.com/us/show/s/umc.cmc.2", "ios": "tv://show"}})
 
 
 class ClientTests(unittest.TestCase):

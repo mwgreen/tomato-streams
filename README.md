@@ -179,6 +179,12 @@ service, score coverage and failures. OMDb usage is tracked in
   `watchmode_names:`; the usual aliases (Max, Amazon Prime Video, Peacock Premium, ...)
   are built in. On-demand lookups need `serve.py` (it holds the key); on a plain static
   host the buttons use whatever links the last sync wrote, else search.
+- **Series land on the show page, not an episode.** Watchmode's link for a series often
+  points at an episode, which autoplays. `SERIES_URL_RULES` in `lib/watchmode.py`
+  rewrites such links to the show page where the URL allows it (Netflix, Paramount+)
+  and otherwise drops the link so the button falls back to the service's search, whose
+  results open the show page. Links that already point at a show page pass through.
+  The rules apply when links are read, so fixing a rule does not need new lookups.
 - **Without a Watchmode key** the buttons open the service's *search* for the title.
   Those URL templates live in `web/watch-links.js`; edit that file if a service changes
   its site. The × on a card hides a title (stored in your browser); toggle
