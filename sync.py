@@ -4,6 +4,7 @@ cache everything, and write data/movies.json for the web UI.
 
     python sync.py                     # normal incremental sync
     python sync.py --list-providers    # print TMDB watch providers for your region
+    python sync.py --list-providers peacock   # ...filtered by name
     python sync.py --full              # ignore the cache
     python sync.py --service "HBO Max" # sync a single service
     python sync.py --limit 30          # quick test run
@@ -40,8 +41,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--kind", choices=["movie", "tv", "all"], default="all",
                    help="what to sync: movies, TV series, or both (default: all enabled in config)")
     p.add_argument("--cache-dir", default=str(ROOT / "cache"), help="cache directory")
-    p.add_argument("--list-providers", action="store_true",
-                   help="print TMDB watch providers for the configured region and exit")
+    p.add_argument("--list-providers", nargs="?", const="", default=None, metavar="NAME",
+                   help="print TMDB watch providers for the configured region and exit; "
+                        "an optional NAME filters by provider name (case-insensitive)")
     p.add_argument("--full", action="store_true", help="ignore the cache and re-fetch everything")
     p.add_argument("--service", action="append", metavar="NAME",
                    help='sync only this service (repeatable), e.g. --service "HBO Max"')
@@ -52,28 +54,32 @@ def parse_args(argv=None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
-def list_providers(tmdb: TMDBClient, cfg) -> int:
+def list_providers(tmdb: TMDBClient, cfg, query: str = "") -> int:
     providers = tmdb.list_watch_providers(cfg.region)
     configured: dict[int, list[str]] = {}
     for s in cfg.services:
         for pid in s.provider_ids:
             configured.setdefault(pid, []).append(s.name + ("" if s.enabled else " (disabled)"))
-    print(f"TMDB movie watch providers for region {cfg.region} ({len(providers)}):\n")
+    query = (query or "").strip().lower()
+    shown = [p for p in providers if not query or query in str(p["provider_name"]).lower()
+             or p["provider_id"] in configured and query in " ".join(configured[p["provider_id"]]).lower()]
+    title = f"TMDB movie watch providers for region {cfg.region}"
+    print(f"{title} matching {query!r} ({len(shown)} of {len(providers)}):\n" if query
+          else f"{title} ({len(providers)}):\n")
     print(f"{'id':>6}  {'provider':<45} configured as")
     print(f"{'-'*6}  {'-'*45} {'-'*20}")
-    known = set()
-    for p in providers:
-        pid = p["provider_id"]
-        known.add(pid)
-        marker = ", ".join(configured.get(pid, []))
-        print(f"{pid:>6}  {p['provider_name']:<45} {marker}")
+    for p in shown:
+        marker = ", ".join(configured.get(p["provider_id"], []))
+        print(f"{p['provider_id']:>6}  {p['provider_name']:<45} {marker}")
+    known = {p["provider_id"] for p in providers}
     missing = [(pid, names) for pid, names in configured.items() if pid not in known]
     print()
     if missing:
         for pid, names in missing:
             print(f"WARNING: provider id {pid} ({', '.join(names)}) is not available in {cfg.region}")
         return 1
-    print("All configured provider IDs exist in this region.")
+    print("All configured provider IDs exist in this region. Compare the names in the "
+          "'configured as' column with the provider names to catch wrong IDs.")
     return 0
 
 
@@ -109,9 +115,9 @@ def main(argv=None) -> int:
         log.error("%s", exc)
         return 2
 
-    if args.list_providers:
+    if args.list_providers is not None:
         try:
-            return list_providers(tmdb, cfg)
+            return list_providers(tmdb, cfg, args.list_providers)
         except TMDBError as exc:
             log.error("%s", exc)
             return 1

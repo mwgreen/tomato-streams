@@ -173,6 +173,20 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .badge[data-service="disney"] { background: #12285a; border-color: #2c55b8; }
 .badge[data-service="paramount"] { background: #0d3260; border-color: #1f5fb5; }
 .badge[data-service="peacock"] { background: #3b2a06; border-color: #b78a1a; }
+.badge[data-service="starz"] { background: #1b1b1b; border-color: #7a7a7a; }
+.badge[data-service="amc"] { background: #3a0f12; border-color: #a52a2a; }
+.badge[data-service="mgm"] { background: #3a2a00; border-color: #c9a227; }
+.badge[data-service="criterion-channel"] { background: #0f2f3a; border-color: #2e8ea6; }
+.badge[data-service="mubi"] { background: #10203a; border-color: #3d6bd6; }
+.badge[data-service="britbox"] { background: #1a1f4a; border-color: #4a55c8; }
+.badge[data-service="acorn-tv"] { background: #0e3a1f; border-color: #2f9c55; }
+.badge[data-service="shudder"] { background: #2b0a0a; border-color: #c0392b; }
+.badge[data-service="crunchyroll"] { background: #4a2a00; border-color: #f47521; }
+.badge[data-service="hallmark"] { background: #3a0f2e; border-color: #b0357e; }
+.badge[data-service="youtube-premium"] { background: #3a0c0c; border-color: #d33; }
+.badge[data-service="tubi"] { background: #3a1a00; border-color: #fa7f1f; }
+.badge[data-service="pluto-tv"] { background: #1a1a3a; border-color: #5a5ad6; }
+.badge[data-service="the-roku-channel"] { background: #2a1247; border-color: #6f2da8; }
 .badge-none { opacity: .6; }
 .checks .badge { font-size: 12px; }
 .card .overview { margin-top: 2px; }

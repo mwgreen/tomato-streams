@@ -82,12 +82,13 @@ class FakeTMDB:
         self.min_votes_seen = {}
 
     def list_watch_providers(self, region):
-        return [{"provider_id": i, "provider_name": f"P{i}", "display_priority": i} for i in (8, 1796, 1899, 15, 1825)]
+        return [{"provider_id": i, "provider_name": f"P{i}", "display_priority": i} for i in (8, 1796, 1899, 15, 1825, 350)]
 
 
     def discover_flatrate(self, region, provider_ids, min_vote_count, max_pages, sort_by="popularity.desc",
-                          kind="movie"):
+                          kind="movie", monetization_types=None):
         self.calls["discover"] += 1
+        assert monetization_types == ["flatrate"], monetization_types
         self.min_votes_seen[kind] = min_vote_count
         key = "|".join(map(str, provider_ids))
         if kind == "tv":
@@ -337,6 +338,32 @@ class HelperTests(unittest.TestCase):
         self.assertIn("HBO Max", text)
         self.assertIn("WARNING: provider id 4242 (Netflix)", text)
         self.assertIn("Hulu (disabled)", text)
+
+    def test_list_providers_filter(self):
+        import sync
+        cfg = load_config_from_text(CONFIG)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = sync.list_providers(FakeTMDB(), cfg, "hbo")   # matches the configured name
+        text = buf.getvalue()
+        self.assertEqual(code, 0)
+        self.assertIn("1899  P1899", text)
+        self.assertNotIn("P1825", text)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            sync.list_providers(FakeTMDB(), cfg, "p1825")   # matches the provider name
+        self.assertIn("1825  P1825", buf.getvalue())
+
+    def test_monetization_types(self):
+        with self.assertRaises(ConfigError):
+            load_config_from_text("services:\n  - name: X\n    provider_ids: [1]\nsync:\n  monetization_types: [flatrate, rent]\n")
+        cfg = load_config_from_text("services:\n  - name: X\n    provider_ids: [1]\nsync:\n  monetization_types: [flatrate, free]\n")
+        self.assertEqual(cfg.sync.monetization_types, ["flatrate", "free"])
+        from lib.tmdb import flatrate_providers
+        d = {"watch/providers": {"results": {"US": {"flatrate": [{"provider_id": 8}], "free": [{"provider_id": 73}, {"provider_id": 8}],
+                                                    "rent": [{"provider_id": 10}]}}}}
+        self.assertEqual([p["provider_id"] for p in flatrate_providers(d, "US")], [8])
+        self.assertEqual([p["provider_id"] for p in flatrate_providers(d, "US", ["flatrate", "free"])], [8, 73])
 
 
 def load_config_from_text(text):

@@ -1,13 +1,19 @@
 region: US
 
-# Add or remove services here. `enabled: false` hides a service without deleting it.
-# provider_ids are TMDB watch-provider IDs. A service can have several
-# (e.g. ad-supported tiers). Verify IDs with: python sync.py --list-providers
+# Add or remove services here. `enabled: false` keeps a service in the list
+# without syncing it. provider_ids are TMDB watch-provider IDs; a service can
+# have several (e.g. ad-supported tiers or a "with Showtime" bundle).
 #
-# Only the exact IDs listed here are matched. Amazon/Apple "Channel" variants
-# (e.g. "HBO Max Amazon Channel") are separate providers and are excluded
-# unless you add their IDs.
+# The IDs below are the usual US ones but MUST be checked against TMDB before
+# trusting them:   python sync.py --list-providers            (everything)
+#                  python sync.py --list-providers peacock    (name filter)
+# A wrong ID silently maps to the wrong provider, so compare the printed names.
+#
+# Only the exact IDs listed here are matched. Amazon/Apple/Roku "Channel"
+# variants (e.g. "Paramount+ Amazon Channel") are separate TMDB providers and
+# are excluded unless you add their IDs to the service that carries them.
 services:
+  # --- the services on Rotten Tomatoes' "Movies at Home" filter (minus Fandango at Home) ---
   - name: Netflix
     provider_ids: [8, 1796]        # Netflix, Netflix Standard with Ads
     enabled: true
@@ -15,10 +21,10 @@ services:
     provider_ids: [9, 2100]        # Amazon Prime Video, Prime Video with Ads
     enabled: true
   - name: Apple TV
-    provider_ids: [350]            # Apple TV+
+    provider_ids: [350]            # Apple TV+ (TMDB lists it as "Apple TV+" or "Apple TV")
     enabled: true
   - name: HBO Max
-    provider_ids: [1899]
+    provider_ids: [1899]           # Max / HBO Max
     enabled: true
   - name: Hulu
     provider_ids: [15]
@@ -26,8 +32,63 @@ services:
   - name: Disney+
     provider_ids: [337]
     enabled: true
+  - name: Paramount+
+    provider_ids: [531, 1770]      # Paramount Plus, Paramount+ with Showtime
+    enabled: true
+  - name: Peacock
+    provider_ids: [386, 387]       # Peacock Premium, Peacock Premium Plus
+    enabled: true
+
+  # --- other US subscription services; flip `enabled: true` for the ones you pay for ---
+  - name: Starz
+    provider_ids: [43]
+    enabled: false
+  - name: AMC+
+    provider_ids: [526]
+    enabled: false
+  - name: MGM+
+    provider_ids: [34]             # formerly Epix
+    enabled: false
+  - name: Criterion Channel
+    provider_ids: [258]
+    enabled: false
+  - name: Mubi
+    provider_ids: [11]
+    enabled: false
+  - name: BritBox
+    provider_ids: [151]
+    enabled: false
+  - name: Acorn TV
+    provider_ids: [87]
+    enabled: false
+  - name: Shudder
+    provider_ids: [99]
+    enabled: false
+  - name: Crunchyroll
+    provider_ids: [283]
+    enabled: false
+  - name: Hallmark+
+    provider_ids: [1290]
+    enabled: false
+  - name: YouTube Premium
+    provider_ids: [188]
+    enabled: false
+
+  # --- free, ad-supported services. TMDB files these under the "free" monetization
+  #     type, so also add `free` to sync.monetization_types below if you enable them ---
+  - name: Tubi
+    provider_ids: [73]
+    enabled: false
+  - name: Pluto TV
+    provider_ids: [300]
+    enabled: false
+  - name: The Roku Channel
+    provider_ids: [207]
+    enabled: false
 
 sync:
+  monetization_types: [flatrate] # subscription only. Add `free` for Tubi/Pluto-style
+                                 # ad-supported services; never `rent`/`buy`.
   min_tmdb_vote_count: 50        # skip ultra-obscure titles at discovery time
   max_pages_per_service: 50      # TMDB pages of 20 results each
   cache_days_scores: 7           # re-fetch RT/OMDb scores after N days

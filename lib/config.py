@@ -23,8 +23,12 @@ class Service:
         return re.sub(r"[^a-z0-9]+", "-", self.name.lower()).strip("-")
 
 
+ALLOWED_MONETIZATION = {"flatrate", "free", "ads"}
+
+
 @dataclass
 class SyncSettings:
+    monetization_types: list[str] = field(default_factory=lambda: ["flatrate"])
     min_tmdb_vote_count: int = 50
     max_pages_per_service: int = 50
     cache_days_scores: float = 7
@@ -113,7 +117,16 @@ def load_config(path: str | Path = "config.yaml") -> Config:
         )
 
     sync_raw = raw.get("sync") or {}
+    monetization = sync_raw.get("monetization_types") or ["flatrate"]
+    if isinstance(monetization, str):
+        monetization = [monetization]
+    monetization = [str(m).lower() for m in monetization]
+    bad = sorted(set(monetization) - ALLOWED_MONETIZATION)
+    if bad:
+        raise ConfigError(f"sync.monetization_types: {bad} not allowed; use only "
+                          f"{sorted(ALLOWED_MONETIZATION)} (rent/buy would defeat the purpose)")
     sync = SyncSettings(
+        monetization_types=monetization,
         min_tmdb_vote_count=int(sync_raw.get("min_tmdb_vote_count", 50)),
         max_pages_per_service=max(1, int(sync_raw.get("max_pages_per_service", 50))),
         cache_days_scores=float(sync_raw.get("cache_days_scores", 7)),

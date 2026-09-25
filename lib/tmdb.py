@@ -85,18 +85,20 @@ class TMDBClient:
 
     def discover_flatrate(self, region: str, provider_ids: list[int], min_vote_count: int,
                           max_pages: int, sort_by: str = "popularity.desc",
-                          kind: str = "movie") -> Iterator[dict]:
-        """Titles included with a subscription (`flatrate`) on any of `provider_ids`.
+                          kind: str = "movie", monetization_types: list[str] | None = None) -> Iterator[dict]:
+        """Titles included with a subscription (`flatrate`, or the given monetization
+        types) on any of `provider_ids`. Never rent/buy.
 
         `kind` is "movie" or "tv" (TMDB discover endpoints share the same parameters).
         """
+        monetization = "|".join(monetization_types or ["flatrate"])
         page = 1
         while page <= min(max_pages, MAX_PAGE):
             data = self._get(
                 f"/discover/{kind}",
                 watch_region=region,
                 with_watch_providers="|".join(str(i) for i in provider_ids),
-                with_watch_monetization_types="flatrate",
+                with_watch_monetization_types=monetization,
                 **{"vote_count.gte": min_vote_count},
                 sort_by=sort_by,
                 include_adult="false",
@@ -126,9 +128,18 @@ def image_url(path: str | None, size: str) -> str | None:
     return f"{IMAGE_BASE}{size}{path}" if path else None
 
 
-def flatrate_providers(details: dict, region: str) -> list[dict]:
+def flatrate_providers(details: dict, region: str, monetization_types: list[str] | None = None) -> list[dict]:
+    """Providers that include the title in a subscription (or the given types), never rent/buy."""
     results = ((details.get("watch/providers") or {}).get("results") or {})
-    return list((results.get(region) or {}).get("flatrate") or [])
+    region_data = results.get(region) or {}
+    found: list[dict] = []
+    seen: set = set()
+    for mtype in monetization_types or ["flatrate"]:
+        for p in region_data.get(mtype) or []:
+            if p.get("provider_id") not in seen:
+                seen.add(p.get("provider_id"))
+                found.append(p)
+    return found
 
 
 def justwatch_link(details: dict, region: str) -> str | None:
@@ -162,8 +173,10 @@ def _year(date: str | None) -> int | None:
     return int(date[:4]) if date[:4].isdigit() else None
 
 
-def normalize_details(details: dict, region: str, kind: str = "movie") -> dict:
+def normalize_details(details: dict, region: str, kind: str = "movie",
+                      monetization_types: list[str] | None = None) -> dict:
     """Reduce a TMDB movie or TV details payload to the fields the app stores."""
+    providers = flatrate_providers(details, region, monetization_types)
     if kind == "tv":
         release = details.get("first_air_date") or ""
         title = details.get("name") or details.get("original_name") or ""
@@ -204,6 +217,6 @@ def normalize_details(details: dict, region: str, kind: str = "movie") -> dict:
         "tmdb_vote_count": details.get("vote_count"),
         "popularity": details.get("popularity"),
         "justwatch_link": justwatch_link(details, region),
-        "flatrate_provider_ids": [p.get("provider_id") for p in flatrate_providers(details, region)],
-        "flatrate_provider_names": [p.get("provider_name") for p in flatrate_providers(details, region)],
+        "flatrate_provider_ids": [p.get("provider_id") for p in providers],
+        "flatrate_provider_names": [p.get("provider_name") for p in providers],
     }

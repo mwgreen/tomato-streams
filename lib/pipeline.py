@@ -73,7 +73,8 @@ def discover(tmdb: TMDBClient, cache: MovieCache, cfg: Config, services: list[Se
     ok_services = 0
     min_votes = cfg.tv.min_tmdb_vote_count if kind == "tv" else cfg.sync.min_tmdb_vote_count
     for service in services:
-        key = f"{cfg.region}-{service.slug}-{'-'.join(map(str, service.provider_ids))}"
+        key = (f"{cfg.region}-{service.slug}-{'-'.join(map(str, service.provider_ids))}"
+               f"-{'-'.join(cfg.sync.monetization_types)}")
         cached = None if full else cache.load_discovery(key)
         if cached and is_fresh(cached.get("fetched_at"), cfg.sync.cache_days_providers):
             results = cached.get("results") or []
@@ -82,7 +83,8 @@ def discover(tmdb: TMDBClient, cache: MovieCache, cfg: Config, services: list[Se
             try:
                 results = []
                 for item in tmdb.discover_flatrate(cfg.region, service.provider_ids, min_votes,
-                                                   cfg.sync.max_pages_per_service, kind=kind):
+                                                   cfg.sync.max_pages_per_service, kind=kind,
+                                                   monetization_types=cfg.sync.monetization_types):
                     results.append({"id": item.get("id"), "title": item.get("title") or item.get("name"),
                                     "popularity": item.get("popularity"),
                                     "vote_count": item.get("vote_count")})
@@ -126,7 +128,7 @@ def ensure_details(tmdb: TMDBClient, cache: MovieCache, cfg: Config, tmdb_id: in
         entry["details_fetched_at"] = now_iso()
         cache.save(tmdb_id, entry)
         return None
-    entry["details"] = normalize_details(raw, cfg.region, kind)
+    entry["details"] = normalize_details(raw, cfg.region, kind, cfg.sync.monetization_types)
     entry["details_fetched_at"] = now_iso()
     cache.save(tmdb_id, entry)
     return entry

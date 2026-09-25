@@ -83,11 +83,24 @@ services:
     enabled: true
 ```
 
-- **Add a service**: append an entry with its name and TMDB provider ID(s) from
-  `--list-providers`, then run `python sync.py`. The UI picks it up automatically:
-  the service list, badges and filters all come from `data/movies.json`.
+`config.yaml` ships with the services on Rotten Tomatoes' "Movies at Home" filter
+(Netflix, Prime Video, Apple TV, HBO Max, Hulu, Disney+, Paramount+, Peacock; Fandango
+at Home is rent/buy and deliberately left out) enabled, plus Starz, AMC+, MGM+,
+Criterion Channel, Mubi, BritBox, Acorn TV, Shudder, Crunchyroll, Hallmark+, YouTube
+Premium and the free Tubi / Pluto TV / Roku Channel entries disabled.
+
+- **Enable a service**: set `enabled: true` on its entry, or append a new entry with
+  its name and TMDB provider ID(s), then run `python sync.py`. The UI picks it up
+  automatically: the service list, badges and filters all come from the JSON files.
 - **Remove a service**: delete its entry, or set `enabled: false` to keep it around
-  without showing it. Re-run `python sync.py`.
+  without syncing it. Re-run `python sync.py`.
+- **Check the IDs first.** They are TMDB's usual US IDs but a wrong ID maps silently to
+  a different provider, so run `python sync.py --list-providers peacock` (any name
+  fragment works) and compare the `configured as` column with the provider names.
+- **Free ad-supported services** (Tubi, Pluto TV, The Roku Channel) are filed by TMDB
+  under the `free` monetization type rather than `flatrate`; add `free` to
+  `sync.monetization_types` if you enable them. `rent` and `buy` are rejected on
+  purpose.
 - Only the exact IDs you list are matched. Amazon/Apple "Channel" variants such as
   "HBO Max Amazon Channel" are separate providers on TMDB and are ignored unless
   you add their IDs.
@@ -103,7 +116,7 @@ services:
 
 | Flag | What it does |
 | --- | --- |
-| `--list-providers` | Print TMDB watch providers for the configured region and exit |
+| `--list-providers [NAME]` | Print TMDB watch providers for the configured region (optionally filtered by name) and exit |
 | `--full` | Ignore the cache and re-fetch everything |
 | `--kind movie` / `--kind tv` | Sync only movies or only TV series (default: both, if `tv.enabled`) |
 | `--service "HBO Max"` | Sync one service (repeatable); other services keep their previous data |
