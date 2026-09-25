@@ -207,6 +207,12 @@ grid, and a press on **Watch on <service>** launches that service's Apple TV app
 Run `serve.py --host 0.0.0.0` (with `pip install zeroconf` so the Apple TV can find it),
 then see [`tvos/README.md`](tvos/README.md) for building it with Xcode.
 
+## Running on sanctarus
+
+The always-on copy runs on the home server as systemd services, with a weekly sync
+timer, at https://tomato.sanctarus.com (and http://192.168.68.77:8765 at home). Setup,
+deploys and logs: [`deploy/README.md`](deploy/README.md).
+
 ## Scheduling weekly refreshes
 
 The cache means a weekly run only re-fetches changed availability and scores older

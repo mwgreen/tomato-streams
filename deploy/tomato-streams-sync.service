@@ -1,0 +1,12 @@
+[Unit]
+Description=Tomato Streams weekly sync (TMDB + Rotten Tomatoes -> data/*.json)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=mwgreen
+WorkingDirectory=/home/mwgreen/git-repos/tomato-streams
+ExecStart=/home/mwgreen/git-repos/tomato-streams/.venv/bin/python sync.py
+# a first sync of new titles is slow (one polite RT request per title)
+TimeoutStartSec=6h

@@ -1,0 +1,16 @@
+[Unit]
+Description=Tomato Streams (Streaming Finder web app + API)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=mwgreen
+WorkingDirectory=/home/mwgreen/git-repos/tomato-streams
+# 0.0.0.0 so the Apple TV / phones on the LAN can reach it directly (and Bonjour works);
+# the public hostname goes through the cloudflared tunnel to localhost:8765.
+ExecStart=/home/mwgreen/git-repos/tomato-streams/.venv/bin/python serve.py --host 0.0.0.0 --port 8765
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
