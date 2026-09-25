@@ -124,6 +124,27 @@ class FakeOMDb:
         return {"Response": "True", "tomatoURL": "N/A", "Ratings": []}
 
 
+class FakeWatchmode:
+    enabled = True
+    used_this_month = 0
+
+    def __init__(self):
+        self.calls = []
+
+    def sources(self, kind, tmdb_id, imdb_id, region="US"):
+        self.calls.append((kind, tmdb_id, imdb_id))
+        self.used_this_month += 1
+        if imdb_id == "tt0113277":
+            return [{"name": "Netflix", "type": "sub", "region": "US", "web_url": "https://www.netflix.com/title/60020810",
+                     "ios_url": "nflx://www.netflix.com/title/60020810"},
+                    {"name": "Max", "type": "sub", "region": "US", "web_url": "https://play.max.com/movie/heat"}]
+        if imdb_id == "tt15398776":
+            return []
+        if imdb_id is None:
+            return []   # looked up by TMDB id; Watchmode knows nothing
+        return None
+
+
 class FakeRT:
     def __init__(self):
         self.searches = []
@@ -226,6 +247,36 @@ class PipelineTests(unittest.TestCase):
         out2, _ = self.run_it(previous=out)
         self.assertEqual({m["title"]: m["added"] for m in out2["movies"]}, {m["title"]: m["added"] for m in out["movies"]})
         self.assertEqual(out2["tracking_since"], "2024-01-15")
+
+    def test_watch_links(self):
+        wm = FakeWatchmode()
+        out, summary = run_sync(self.cfg, self.tmdb, self.omdb, self.rt, self.cache, watchmode=wm)
+        by_title = {m["title"]: m for m in out["movies"]}
+        self.assertEqual(by_title["Heat"]["watch_urls"], {"Netflix": "https://www.netflix.com/title/60020810",
+                                                          "HBO Max": "https://play.max.com/movie/heat"})
+        self.assertEqual(by_title["Heat"]["watch_app_urls"], {"Netflix": "nflx://www.netflix.com/title/60020810"})
+        self.assertEqual(by_title["Oppenheimer"]["watch_urls"], {})
+        self.assertEqual(summary.watch_links_complete, 1)
+        self.assertEqual(summary.watch_links_fetched, 3)
+        self.assertEqual(summary.watchmode_used_this_month, 3)
+        self.assertIn("Watch links: 1 titles", summary.format())
+        # cached: a second run makes no Watchmode calls
+        wm.calls = []
+        out2, _ = run_sync(self.cfg, self.tmdb, self.omdb, self.rt, self.cache, watchmode=wm)
+        self.assertEqual(wm.calls, [])
+        self.assertEqual({m["title"]: m["watch_urls"] for m in out2["movies"]},
+                         {m["title"]: m["watch_urls"] for m in out["movies"]})
+        # a title gaining a new service without a cached link is looked up again
+        entry = self.cache.load(1)
+        entry["watch_links"]["links"].pop("HBO Max")
+        entry["watch_links"]["checked_services"] = ["Netflix"]
+        self.cache.save(1, entry)
+        run_sync(self.cfg, self.tmdb, self.omdb, self.rt, self.cache, watchmode=wm)
+        self.assertEqual(wm.calls, [("movie", 1, "tt0113277")])
+        # without Watchmode the cached links are still used
+        out3, _ = run_sync(self.cfg, self.tmdb, self.omdb, self.rt, self.cache)
+        self.assertEqual(next(m for m in out3["movies"] if m["title"] == "Heat")["watch_urls"]["Netflix"],
+                         "https://www.netflix.com/title/60020810")
 
     def test_second_run_uses_cache(self):
         self.run_it()

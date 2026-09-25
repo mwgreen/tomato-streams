@@ -30,6 +30,9 @@ API keys are only used by `sync.py` and never reach the browser.
    - OMDb: request a key at [omdbapi.com/apikey.aspx](https://www.omdbapi.com/apikey.aspx)
      (free tier: 1,000 requests/day). Optional but recommended, it finds RT pages
      more reliably than searching.
+   - Watchmode: request a key at [api.watchmode.com/requestApiKey](https://api.watchmode.com/requestApiKey)
+     (free plan: a few thousand requests/month). Optional: with it, the "Watch on
+     <service>" buttons open the title itself instead of the service's search page.
 2. **Install**:
    ```sh
    python3 -m venv .venv && source .venv/bin/activate   # optional
@@ -153,14 +156,24 @@ service, score coverage and failures. OMDb usage is tracked in
 - Sort: critic score, audience score, combined average, critic review count, year, title.
   Ties are broken by review count.
 - Click a card for the backdrop, full description, trailer, links to Rotten Tomatoes and
-  JustWatch, and a **Watch on <service>** button per service. The service badges on
+  JustWatch, and a button per service: **Watch on <service>** when an exact link to the
+  title is known, **Find on <service>** when it falls back to the service's search. The service badges on
   cards and list rows are the same links. On an iPhone these open the service's native
   app when it is installed (Universal Links), otherwise its website.
-- The buttons open the service's *search* for the title, since TMDB does not provide
-  per-service title URLs. The search URL templates live in `web/watch-links.js`; edit
-  that file if a service changes its site. A title can carry exact links instead
-  (`"watch_urls": {"Netflix": "https://www.netflix.com/title/123"}` in the JSON), which
-  take precedence; a Watchmode or Streaming Availability API step could fill those in. The × on a card hides a title (stored in your browser); toggle
+- **Exact links** come from Watchmode when `WATCHMODE_API_KEY` is set: one lookup per
+  title (by IMDb id, or TMDB id as a fallback) returns each service's own page for the
+  title, e.g. `netflix.com/title/60020810`, plus the iOS deep link, which is stored as
+  `watch_app_urls` for a future native app. Only subscription sources that match a
+  configured service are kept; "Channel" bundles and rent/buy offers are ignored.
+  Results are cached for `sync.cache_days_watch_links` days and re-fetched when a title
+  gains a service that has no link yet, so the free monthly quota mostly goes to new
+  titles. Usage is tracked in `cache/watchmode_usage.json` and lookups pause near the
+  limit. If Watchmode names a service differently from `config.yaml`, add the name under
+  that service's `watchmode_names:`; the usual aliases (Max, Amazon Prime Video, Peacock
+  Premium, ...) are built in.
+- **Without a Watchmode key** the buttons open the service's *search* for the title.
+  Those URL templates live in `web/watch-links.js`; edit that file if a service changes
+  its site. The × on a card hides a title (stored in your browser); toggle
   "Show hidden" to bring them back.
 - Filter, sort and view state lives in the URL hash, so views can be bookmarked. The
   Movies / TV Series tabs carry the current filters across, and the last selections are

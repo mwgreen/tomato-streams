@@ -17,6 +17,7 @@ class Service:
     name: str
     provider_ids: list[int]
     enabled: bool = True
+    watchmode_names: list[str] = field(default_factory=list)  # extra Watchmode source names
 
     @property
     def slug(self) -> str:
@@ -33,6 +34,7 @@ class SyncSettings:
     max_pages_per_service: int = 50
     cache_days_scores: float = 7
     cache_days_providers: float = 2
+    cache_days_watch_links: float = 30
     request_delay_seconds: float = 1.0
 
 
@@ -113,6 +115,7 @@ def load_config(path: str | Path = "config.yaml") -> Config:
                 name=name,
                 provider_ids=_as_int_list(item.get("provider_ids"), f"services[{i}] ({name})"),
                 enabled=bool(item.get("enabled", True)),
+                watchmode_names=[str(n) for n in (item.get("watchmode_names") or [])],
             )
         )
 
@@ -131,6 +134,7 @@ def load_config(path: str | Path = "config.yaml") -> Config:
         max_pages_per_service=max(1, int(sync_raw.get("max_pages_per_service", 50))),
         cache_days_scores=float(sync_raw.get("cache_days_scores", 7)),
         cache_days_providers=float(sync_raw.get("cache_days_providers", 2)),
+        cache_days_watch_links=float(sync_raw.get("cache_days_watch_links", 30)),
         request_delay_seconds=float(sync_raw.get("request_delay_seconds", 1.0)),
     )
     tv_raw = raw.get("tv") or {}

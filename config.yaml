@@ -12,6 +12,9 @@ region: US
 # Only the exact IDs listed here are matched. Amazon/Apple/Roku "Channel"
 # variants (e.g. "Paramount+ Amazon Channel") are separate TMDB providers and
 # are excluded unless you add their IDs to the service that carries them.
+#
+# Optional per service: `watchmode_names: [...]` adds Watchmode source names that
+# should count as this service (the common ones are built in).
 services:
   # --- the services on Rotten Tomatoes' "Movies at Home" filter (minus Fandango at Home) ---
   - name: Netflix
@@ -93,6 +96,7 @@ sync:
   max_pages_per_service: 50      # TMDB pages of 20 results each
   cache_days_scores: 7           # re-fetch RT/OMDb scores after N days
   cache_days_providers: 2        # re-check streaming availability after N days
+  cache_days_watch_links: 30     # re-fetch Watchmode links after N days (only with WATCHMODE_API_KEY)
   request_delay_seconds: 1.0     # politeness delay for rottentomatoes.com requests
 
 tv:

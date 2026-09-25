@@ -11,6 +11,7 @@ from lib.omdb import OMDbClient, extract_rt_critic_score, extract_rt_url
 from lib.rottentomatoes import (STATUS_ERROR, STATUS_NOT_FOUND, STATUS_OK, RTError, RottenTomatoesClient,
                                 RTScores, normalize_rt_url)
 from lib.tmdb import TMDBClient, TMDBError, normalize_details
+from lib.watchmode import WatchmodeClient, map_sources_to_services
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,10 @@ class SyncSummary:
     details_fetched: int = 0
     details_cached: int = 0
     omdb_used_today: int | None = None
+    watch_links_fetched: int = 0
+    watch_links_complete: int = 0
+    watch_links_partial: int = 0
+    watchmode_used_this_month: int | None = None
     failures: list[str] = field(default_factory=list)
 
     def format(self) -> str:
@@ -49,6 +54,10 @@ class SyncSummary:
             lines.append(f"  status {status:<10} {self.rt_status.get(status, 0)}")
         if self.omdb_used_today is not None:
             lines.append(f"OMDb requests used today: {self.omdb_used_today}")
+        if self.watchmode_used_this_month is not None:
+            lines.append(f"Watch links: {self.watch_links_complete} titles with a direct link for every service, "
+                         f"{self.watch_links_partial} partial ({self.watch_links_fetched} Watchmode lookups this run, "
+                         f"{self.watchmode_used_this_month} used this month)")
         if self.failures:
             lines.append(f"Failures ({len(self.failures)}):")
             lines.extend(f"  - {f}" for f in self.failures[:50])
@@ -208,6 +217,37 @@ def ensure_scores(entry: dict, cache: MovieCache, cfg: Config, omdb: OMDbClient 
 
 
 # ---------------------------------------------------------------------------
+# Step 4: exact watch links (Watchmode, optional)
+# ---------------------------------------------------------------------------
+def ensure_watch_links(entry: dict, cache: MovieCache, cfg: Config, watchmode: WatchmodeClient | None,
+                       carried: list[str], services: list[Service], full: bool,
+                       summary: SyncSummary) -> dict:
+    """{service: {"web": url, "ios": url}} for the services carrying this title, cached."""
+    cached = entry.get("watch_links") or {}
+    links = cached.get("links") or {}
+    if watchmode is None or not watchmode.enabled:
+        return {k: v for k, v in links.items() if k in carried}
+    missing = [s for s in carried if s not in links]
+    fresh = not full and is_fresh(cached.get("fetched_at"), cfg.sync.cache_days_watch_links)
+    if fresh and not missing:
+        return {k: v for k, v in links.items() if k in carried}
+    if fresh and missing and cached.get("checked_services") and set(missing) <= set(cached["checked_services"]):
+        return {k: v for k, v in links.items() if k in carried}  # already looked, Watchmode had nothing
+
+    details = entry["details"]
+    sources = watchmode.sources(details.get("kind") or "movie", details.get("tmdb_id"), details.get("imdb_id"),
+                                cfg.region)
+    if sources is None:
+        return {k: v for k, v in links.items() if k in carried}
+    summary.watch_links_fetched += 1
+    include_free = "free" in cfg.sync.monetization_types
+    new_links = map_sources_to_services(sources, services, cfg.region, include_free=include_free)
+    entry["watch_links"] = {"links": new_links, "fetched_at": now_iso(), "checked_services": sorted(carried)}
+    cache.save(entry["tmdb_id"], entry)
+    return {k: v for k, v in new_links.items() if k in carried}
+
+
+# ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
 def track_first_seen(entry: dict, carried: list[str], today: str) -> bool:
@@ -226,8 +266,9 @@ def track_first_seen(entry: dict, carried: list[str], today: str) -> bool:
 
 
 def build_movie(details: dict, services: list[str], scores: RTScores,
-                first_seen: dict | None = None) -> dict:
+                first_seen: dict | None = None, watch_links: dict | None = None) -> dict:
     kind = details.get("kind") or "movie"
+    watch_links = watch_links or {}
     added = {name: first_seen[name] for name in services if first_seen and first_seen.get(name)}
     tv_fields = {}
     if kind == "tv":
@@ -258,6 +299,8 @@ def build_movie(details: dict, services: list[str], scores: RTScores,
         "services": services,
         "added": added,                                  # service -> first date seen there
         "added_at": min(added.values()) if added else None,
+        "watch_urls": {k: v["web"] for k, v in watch_links.items() if v.get("web")},
+        "watch_app_urls": {k: v["ios"] for k, v in watch_links.items() if v.get("ios")},
         "justwatch_link": details.get("justwatch_link"),
         "rt": {
             "url": scores.url,
@@ -292,7 +335,8 @@ def merge_with_previous(new_movies: list[dict], previous: dict | None, synced: l
 def run_sync(cfg: Config, tmdb: TMDBClient, omdb: OMDbClient | None, rt: RottenTomatoesClient | None,
              cache: MovieCache, *, full: bool = False, limit: int | None = None,
              only_services: list[Service] | None = None, previous: dict | None = None,
-             progress_every: int = 25, kind: str = "movie") -> tuple[dict, SyncSummary]:
+             progress_every: int = 25, kind: str = "movie",
+             watchmode: WatchmodeClient | None = None) -> tuple[dict, SyncSummary]:
     """Run the pipeline for one `kind` ("movie" or "tv") and return (output, summary)."""
     summary = SyncSummary()
     enabled = cfg.enabled_services
@@ -327,7 +371,13 @@ def run_sync(cfg: Config, tmdb: TMDBClient, omdb: OMDbClient | None, rt: RottenT
         if track_first_seen(entry, carried, today):
             cache.save(tmdb_id, entry)
         scores = ensure_scores(entry, cache, cfg, omdb, rt, full, summary)
-        movies.append(build_movie(details, carried, scores, entry.get("services_first_seen")))
+        links = ensure_watch_links(entry, cache, cfg, watchmode, carried, enabled, full, summary)
+        if links:
+            if all(s in links for s in carried):
+                summary.watch_links_complete += 1
+            else:
+                summary.watch_links_partial += 1
+        movies.append(build_movie(details, carried, scores, entry.get("services_first_seen"), links))
         if progress_every and i % progress_every == 0:
             log.info("  %d/%d  %s (%s) -> %s", i, total, details.get("title"), details.get("year"),
                      scores.status)
@@ -347,6 +397,8 @@ def run_sync(cfg: Config, tmdb: TMDBClient, omdb: OMDbClient | None, rt: RottenT
     summary.kept = len(movies)
     if omdb is not None and omdb.enabled:
         summary.omdb_used_today = omdb.used_today
+    if watchmode is not None and watchmode.enabled:
+        summary.watchmode_used_this_month = watchmode.used_this_month
 
     added_dates = [d for m in movies for d in (m.get("added") or {}).values()]
     previous_since = (previous or {}).get("tracking_since")

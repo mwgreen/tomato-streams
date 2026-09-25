@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlparse
 import lib.omdb
 import lib.rottentomatoes
 import lib.tmdb
+import lib.watchmode
 import sync
 
 RT_PAGE = """<html><body>
@@ -87,6 +88,13 @@ class MockHandler(BaseHTTPRequestHandler):
                                                        "flatrate": [{"provider_id": 1899, "provider_name": "HBO Max"}]}}}})
         if url.path == "/rt/tv/severance":
             return self._send(200, TV_PAGE, "text/html")
+        if url.path == "/watchmode/title/tt15398776/sources/":
+            assert qs["apiKey"] == "wmkey" and qs["regions"] == "US", qs
+            return self._send(200, [{"name": "Max", "type": "sub", "region": "US",
+                                     "web_url": "https://play.max.com/movie/oppenheimer", "ios_url": "hbomax://feature/opp"},
+                                    {"name": "Amazon", "type": "buy", "region": "US", "web_url": "https://amazon.com/buy"}])
+        if url.path == "/watchmode/title/tt11280740/sources/":
+            return self._send(200, [])
         if url.path == "/omdb/":
             assert qs["tomatoes"] == "true"
             return self._send(200, {"Response": "True", "tomatoURL": "N/A",
@@ -127,8 +135,9 @@ class CliTests(unittest.TestCase):
             mock.patch.object(lib.omdb, "BASE_URL", self.base + "/omdb/"),
             mock.patch.object(lib.rottentomatoes, "BASE_URL", self.base + "/rt"),
             mock.patch.object(lib.rottentomatoes, "SEARCH_URL", self.base + "/rt/search?search={query}"),
+            mock.patch.object(lib.watchmode, "BASE_URL", self.base + "/watchmode"),
             mock.patch("time.sleep", lambda s: None),
-            mock.patch.dict("os.environ", {"TMDB_API_KEY": "k3y", "OMDB_API_KEY": "omdbkey"}),
+            mock.patch.dict("os.environ", {"TMDB_API_KEY": "k3y", "OMDB_API_KEY": "omdbkey", "WATCHMODE_API_KEY": "wmkey"}),
         ]
         for p in patches:
             p.start()
@@ -159,6 +168,10 @@ class CliTests(unittest.TestCase):
                                    "audience_score": 88, "audience_count": "2,500+"})
         self.assertIn("both critic + audience score: 1/1", buf.getvalue())
         self.assertIn("OMDb requests used today: 2", buf.getvalue())
+        self.assertEqual(m["watch_urls"], {"HBO Max": "https://play.max.com/movie/oppenheimer"})
+        self.assertEqual(m["watch_app_urls"], {"HBO Max": "hbomax://feature/opp"})
+        self.assertIn("Watch links: 1 titles with a direct link", buf.getvalue())
+        self.assertEqual(json.loads((self.root / "cache" / "watchmode_usage.json").read_text())["count"], 2)
 
         tv = json.loads((self.root / "data" / "tv.json").read_text())
         self.assertEqual(tv["kind"], "tv")
@@ -177,6 +190,7 @@ class CliTests(unittest.TestCase):
         with redirect_stdout(io.StringIO()):
             self.assertEqual(sync.main(self.args()), 0)
         self.assertEqual([h for h in MockHandler.hits if not h.startswith("/tmdb/watch")], [])
+        self.assertEqual(json.loads((self.root / "data" / "tv.json").read_text())["movies"][0]["watch_urls"], {})
 
     def test_kind_movie_only(self):
         with redirect_stdout(io.StringIO()):

@@ -322,7 +322,7 @@
       const url = watchUrl(m, s);
       if (!url) return "";
       const exact = !!(m.watch_urls && m.watch_urls[s]);
-      return `<a class="watch-btn" data-service="${slug(s)}" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="${exact ? "Open this title on" : "Search for this title on"} ${escapeHtml(s)}"><span class="play">▶</span> Watch on ${escapeHtml(s)}</a>`;
+      return `<a class="watch-btn${exact ? "" : " watch-btn-search"}" data-service="${slug(s)}" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="${exact ? "Open this title on" : "Search for this title on"} ${escapeHtml(s)}"><span class="play">${exact ? "▶" : "⌕"}</span> ${exact ? "Watch on" : "Find on"} ${escapeHtml(s)}</a>`;
     }).join("");
     return buttons || `<span class="badge badge-none">not on a configured service</span>`;
   }

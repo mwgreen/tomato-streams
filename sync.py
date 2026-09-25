@@ -29,6 +29,7 @@ from lib.omdb import OMDbClient  # noqa: E402
 from lib.pipeline import run_sync  # noqa: E402
 from lib.rottentomatoes import RottenTomatoesClient  # noqa: E402
 from lib.tmdb import TMDBClient, TMDBError  # noqa: E402
+from lib.watchmode import WatchmodeClient  # noqa: E402
 
 log = logging.getLogger("sync")
 
@@ -141,7 +142,12 @@ def main(argv=None) -> int:
 
     warn_unknown_providers(tmdb, cfg)
 
-    omdb = rt = None
+    omdb = rt = watchmode = None
+    watchmode_key = os.environ.get("WATCHMODE_API_KEY", "")
+    if watchmode_key and not args.skip_scores:
+        watchmode = WatchmodeClient(watchmode_key, usage_file=Path(args.cache_dir) / "watchmode_usage.json")
+    elif not watchmode_key:
+        log.info("WATCHMODE_API_KEY not set; Watch buttons will use service search pages")
     if not args.skip_scores:
         omdb_key = os.environ.get("OMDB_API_KEY", "")
         if omdb_key:
@@ -168,7 +174,7 @@ def main(argv=None) -> int:
         try:
             output, summary = run_sync(cfg, tmdb, omdb, rt, MovieCache(args.cache_dir, kind),
                                        full=args.full, limit=args.limit, only_services=only_services,
-                                       previous=previous, kind=kind)
+                                       previous=previous, kind=kind, watchmode=watchmode)
         except TMDBError as exc:
             log.error("%s", exc)
             exit_code = 1
