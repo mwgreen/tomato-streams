@@ -322,7 +322,9 @@
       const url = watchUrl(m, s);
       if (!url) return "";
       const exact = !!(m.watch_urls && m.watch_urls[s]);
-      return `<a class="watch-btn${exact ? "" : " watch-btn-search"}" data-service="${slug(s)}" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="${exact ? "Open this title on" : "Search for this title on"} ${escapeHtml(s)}"><span class="play">${exact ? "▶" : "⌕"}</span> ${exact ? "Watch on" : "Find on"} ${escapeHtml(s)}</a>`;
+      const episode = exact && m.watch_url_levels && m.watch_url_levels[s] === "episode";
+      const tip = !exact ? `Search for this title on ${s}` : episode ? `Opens an episode of this series on ${s} (${s} gives no show-page link)` : `Open this title on ${s}`;
+      return `<a class="watch-btn${exact ? "" : " watch-btn-search"}" data-service="${slug(s)}" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="${escapeHtml(tip)}"><span class="play">${exact ? "▶" : "⌕"}</span> ${exact ? "Watch on" : "Find on"} ${escapeHtml(s)}${episode ? '<small class="lvl">episode</small>' : ""}</a>`;
     }).join("");
     return buttons || `<span class="badge badge-none">not on a configured service</span>`;
   }
@@ -504,6 +506,7 @@
         if (body.watch_urls && Object.keys(body.watch_urls).length) {
           m.watch_urls = { ...(m.watch_urls || {}), ...body.watch_urls };
           m.watch_app_urls = { ...(m.watch_app_urls || {}), ...(body.watch_app_urls || {}) };
+          m.watch_url_levels = { ...(m.watch_url_levels || {}), ...(body.watch_url_levels || {}) };
           refreshWatchLinks(m);
         }
         if (body.enabled === false && !Object.keys(body.watch_urls || {}).length) watchApiAvailable = false;

@@ -308,6 +308,8 @@ def build_movie(details: dict, services: list[str], scores: RTScores,
         "added_at": min(added.values()) if added else None,
         "watch_urls": {k: v["web"] for k, v in watch_links.items() if v.get("web")},
         "watch_app_urls": {k: v["ios"] for k, v in watch_links.items() if v.get("ios")},
+        **({"watch_url_levels": {k: v["level"] for k, v in watch_links.items() if v.get("level")}}
+           if kind == "tv" else {}),
         "justwatch_link": details.get("justwatch_link"),
         "rt": {
             "url": scores.url,

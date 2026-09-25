@@ -68,24 +68,22 @@ class MappingTests(unittest.TestCase):
 class SeriesPageTests(unittest.TestCase):
     def test_rewrites(self):
         self.assertEqual(series_page_url("Netflix", "https://www.netflix.com/watch/80057281?trackId=1"),
-                         "https://www.netflix.com/title/80057281")
+                         ("https://www.netflix.com/title/80057281", "show"))
         self.assertEqual(series_page_url("Netflix", "https://www.netflix.com/title/80057281"),
-                         "https://www.netflix.com/title/80057281")
+                         ("https://www.netflix.com/title/80057281", "show"))
         self.assertEqual(series_page_url("Paramount+", "https://www.paramountplus.com/shows/star-trek/video/abc123/pilot/"),
-                         "https://www.paramountplus.com/shows/star-trek/")
+                         ("https://www.paramountplus.com/shows/star-trek/", "show"))
 
-    def test_episode_links_dropped_show_links_kept(self):
-        self.assertIsNone(series_page_url("Hulu", "https://www.hulu.com/watch/0000-1111"))
-        self.assertEqual(series_page_url("Hulu", "https://www.hulu.com/series/the-bear-abc"), "https://www.hulu.com/series/the-bear-abc")
-        self.assertIsNone(series_page_url("HBO Max", "https://play.max.com/video/watch/abc/def"))
-        self.assertEqual(series_page_url("HBO Max", "https://play.max.com/show/abc"), "https://play.max.com/show/abc")
-        self.assertIsNone(series_page_url("Disney+", "https://www.disneyplus.com/video/abc"))
-        self.assertIsNone(series_page_url("Apple TV", "https://tv.apple.com/us/episode/pilot/umc.cmc.1"))
-        self.assertEqual(series_page_url("Apple TV", "https://tv.apple.com/us/show/severance/umc.cmc.2"),
-                         "https://tv.apple.com/us/show/severance/umc.cmc.2")
-        self.assertIsNone(series_page_url("Peacock", "https://www.peacocktv.com/watch/playback/vod/abc"))
-        self.assertEqual(series_page_url("Unknown Service", "https://x.example/watch/1"), "https://x.example/watch/1")
-        self.assertIsNone(series_page_url("Netflix", None))
+    def test_episode_links_kept_and_marked(self):
+        self.assertEqual(series_page_url("Hulu", "https://www.hulu.com/watch/0000-1111"), ("https://www.hulu.com/watch/0000-1111", "episode"))
+        self.assertEqual(series_page_url("Hulu", "https://www.hulu.com/series/the-bear-abc"), ("https://www.hulu.com/series/the-bear-abc", "show"))
+        self.assertEqual(series_page_url("HBO Max", "https://play.max.com/video/watch/abc/def")[1], "episode")
+        self.assertEqual(series_page_url("HBO Max", "https://play.max.com/show/abc")[1], "show")
+        self.assertEqual(series_page_url("Prime Video", "https://www.amazon.com/gp/video/detail/B0X")[1], "show")
+        self.assertEqual(series_page_url("Apple TV", "https://tv.apple.com/us/episode/pilot/umc.cmc.1")[1], "episode")
+        self.assertEqual(series_page_url("Peacock", "https://www.peacocktv.com/watch/playback/vod/abc")[1], "episode")
+        self.assertEqual(series_page_url("Unknown Service", "https://x.example/watch/1"), ("https://x.example/watch/1", "show"))
+        self.assertEqual(series_page_url("Netflix", None), (None, "show"))
 
     def test_links_for_kind(self):
         links = {"Netflix": {"web": "https://www.netflix.com/watch/1", "ios": "nflx://www.netflix.com/watch/1"},
@@ -93,8 +91,9 @@ class SeriesPageTests(unittest.TestCase):
                  "Apple TV": {"web": "https://tv.apple.com/us/show/s/umc.cmc.2", "ios": "tv://show"}}
         self.assertEqual(links_for_kind(links, "movie"), links)
         tv = links_for_kind(links, "tv")
-        self.assertEqual(tv, {"Netflix": {"web": "https://www.netflix.com/title/1"},
-                              "Apple TV": {"web": "https://tv.apple.com/us/show/s/umc.cmc.2", "ios": "tv://show"}})
+        self.assertEqual(tv, {"Netflix": {"web": "https://www.netflix.com/title/1", "level": "show"},
+                              "Hulu": {"web": "https://www.hulu.com/watch/x", "ios": "hulu://watch/x", "level": "episode"},
+                              "Apple TV": {"web": "https://tv.apple.com/us/show/s/umc.cmc.2", "ios": "tv://show", "level": "show"}})
 
 
 class ClientTests(unittest.TestCase):

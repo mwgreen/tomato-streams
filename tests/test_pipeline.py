@@ -255,6 +255,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(by_title["Heat"]["watch_urls"], {"Netflix": "https://www.netflix.com/title/60020810",
                                                           "HBO Max": "https://play.max.com/movie/heat"})
         self.assertEqual(by_title["Heat"]["watch_app_urls"], {"Netflix": "nflx://www.netflix.com/title/60020810"})
+        self.assertNotIn("watch_url_levels", by_title["Heat"])
         self.assertEqual(by_title["Oppenheimer"]["watch_urls"], {})
         self.assertEqual(summary.watch_links_complete, 1)
         self.assertEqual(summary.watch_links_fetched, 3)
@@ -355,7 +356,8 @@ class PipelineTests(unittest.TestCase):
         wm = TVWatchmode()
         out, _ = run_sync(self.cfg, self.tmdb, self.omdb, self.rt, tv_cache, kind="tv", watchmode=wm)
         sev = out["movies"][0]
-        self.assertEqual(sev["watch_urls"], {})   # episode link dropped -> UI searches Apple TV for the show
+        self.assertEqual(sev["watch_urls"], {"Apple TV": "https://tv.apple.com/us/episode/good-news/umc.cmc.1"})
+        self.assertEqual(sev["watch_url_levels"], {"Apple TV": "episode"})
         self.assertEqual(wm.calls, [("tv", 7, "tt11280740")])
         # a cached Netflix episode link is rewritten on the way out without another lookup
         entry = tv_cache.load(7)
@@ -363,6 +365,7 @@ class PipelineTests(unittest.TestCase):
         tv_cache.save(7, entry)
         out, _ = run_sync(self.cfg, self.tmdb, self.omdb, self.rt, tv_cache, kind="tv", watchmode=wm)
         self.assertEqual(out["movies"][0]["watch_urls"], {"Apple TV": "https://tv.apple.com/us/show/severance/umc.cmc.2"})
+        self.assertEqual(out["movies"][0]["watch_url_levels"], {"Apple TV": "show"})
         self.assertEqual(len(wm.calls), 1)
 
     def test_tv_pipeline(self):

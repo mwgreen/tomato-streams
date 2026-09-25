@@ -90,6 +90,7 @@ class AppContext:
             "fetched": summary.watch_links_fetched > 0,
             "watch_urls": {k: v["web"] for k, v in links.items() if v.get("web")},
             "watch_app_urls": {k: v["ios"] for k, v in links.items() if v.get("ios")},
+            "watch_url_levels": {k: v["level"] for k, v in links.items() if v.get("level")},
         }
 
 
