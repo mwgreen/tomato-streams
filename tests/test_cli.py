@@ -153,7 +153,7 @@ class CliTests(unittest.TestCase):
     def test_sync_end_to_end_and_cached_rerun(self):
         buf = io.StringIO()
         with redirect_stdout(buf):
-            code = sync.main(self.args())
+            code = sync.main(self.args("--watch-links"))
         self.assertEqual(code, 0, buf.getvalue())
         out = json.loads((self.root / "data" / "movies.json").read_text())
         self.assertEqual(out["services"], ["HBO Max"])
@@ -188,8 +188,15 @@ class CliTests(unittest.TestCase):
 
         MockHandler.hits = []
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(sync.main(self.args()), 0)
+            self.assertEqual(sync.main(self.args("--watch-links")), 0)
         self.assertEqual([h for h in MockHandler.hits if not h.startswith("/tmdb/watch")], [])
+
+    def test_watch_links_are_on_demand_by_default(self):
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(sync.main(self.args()), 0)
+        self.assertFalse(any(h.startswith("/watchmode") for h in MockHandler.hits))
+        out = json.loads((self.root / "data" / "movies.json").read_text())
+        self.assertEqual(out["movies"][0]["watch_urls"], {})
         self.assertEqual(json.loads((self.root / "data" / "tv.json").read_text())["movies"][0]["watch_urls"], {})
 
     def test_kind_movie_only(self):

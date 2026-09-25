@@ -125,6 +125,7 @@ Premium and the free Tubi / Pluto TV / Roku Channel entries disabled.
 | `--service "HBO Max"` | Sync one service (repeatable); other services keep their previous data |
 | `--limit N` | Process at most N movies (handy for testing) |
 | `--skip-scores` | TMDB only, don't contact OMDb / Rotten Tomatoes |
+| `--watch-links` | Prefill exact Watchmode links for every title (default: on demand via `serve.py`) |
 | `-v` | Debug logging |
 
 The sync never stops on a single failure: each movie gets an `rt.status` of
@@ -160,17 +161,24 @@ service, score coverage and failures. OMDb usage is tracked in
   title is known, **Find on <service>** when it falls back to the service's search. The service badges on
   cards and list rows are the same links. On an iPhone these open the service's native
   app when it is installed (Universal Links), otherwise its website.
-- **Exact links** come from Watchmode when `WATCHMODE_API_KEY` is set: one lookup per
-  title (by IMDb id, or TMDB id as a fallback) returns each service's own page for the
-  title, e.g. `netflix.com/title/60020810`, plus the iOS deep link, which is stored as
+- **Exact links** come from Watchmode when `WATCHMODE_API_KEY` is set. By default they
+  are looked up **on demand**: when you open a title, the page asks `serve.py`
+  (`/api/watch-links`), which calls Watchmode once for that title, stores the result in
+  the same per-title cache `sync.py` uses, and the buttons flip from "Find on" to "Watch
+  on" a moment later. Only titles you actually open use quota, and the next sync writes
+  those links into the JSON. `python sync.py --watch-links` prefills every title instead
+  (one request each) if you have the quota to spare.
+  A lookup (by IMDb id, or TMDB id as a fallback) returns each service's own page for the
+  title, e.g. `netflix.com/title/60020810`, plus the iOS deep link, stored as
   `watch_app_urls` for a future native app. Only subscription sources that match a
   configured service are kept; "Channel" bundles and rent/buy offers are ignored.
   Results are cached for `sync.cache_days_watch_links` days and re-fetched when a title
-  gains a service that has no link yet, so the free monthly quota mostly goes to new
-  titles. Usage is tracked in `cache/watchmode_usage.json` and lookups pause near the
-  limit. If Watchmode names a service differently from `config.yaml`, add the name under
-  that service's `watchmode_names:`; the usual aliases (Max, Amazon Prime Video, Peacock
-  Premium, ...) are built in.
+  gains a service that has no link yet. Usage is tracked in
+  `cache/watchmode_usage.json` and lookups pause near the monthly limit. If Watchmode
+  names a service differently from `config.yaml`, add the name under that service's
+  `watchmode_names:`; the usual aliases (Max, Amazon Prime Video, Peacock Premium, ...)
+  are built in. On-demand lookups need `serve.py` (it holds the key); on a plain static
+  host the buttons use whatever links the last sync wrote, else search.
 - **Without a Watchmode key** the buttons open the service's *search* for the title.
   Those URL templates live in `web/watch-links.js`; edit that file if a service changes
   its site. The × on a card hides a title (stored in your browser); toggle

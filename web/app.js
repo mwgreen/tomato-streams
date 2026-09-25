@@ -466,8 +466,51 @@
     if (m.imdb_id) links.push(`<a href="https://www.imdb.com/title/${encodeURIComponent(m.imdb_id)}/" target="_blank" rel="noopener">IMDb ↗</a>`);
     links.push(`<a href="https://www.themoviedb.org/${m.kind === "tv" ? "tv" : "movie"}/${m.tmdb_id}" target="_blank" rel="noopener">TMDB ↗</a>`);
     $("detail-links").innerHTML = links.join("");
+    el.detail.dataset.id = String(m.tmdb_id);
     el.detail.showModal();
     el.detail.querySelector(".detail-body").scrollTop = 0;
+    lookupWatchLinks(m);
+  }
+
+  // ---------------------------------------------------------------------
+  // On-demand exact links (serve.py -> Watchmode), fetched when a title is opened
+  // ---------------------------------------------------------------------
+  let watchApiAvailable = true;   // false after a 404 (static hosting) or when the server has no key
+  const watchLookups = new Map(); // tmdb_id -> Promise
+
+  function needsWatchLookup(m) {
+    return m.services.some((s) => !(m.watch_urls && m.watch_urls[s]));
+  }
+
+  function refreshWatchLinks(m) {
+    for (const node of document.querySelectorAll(`[data-id="${m.tmdb_id}"] .badges`)) node.innerHTML = watchBadgesHtml(m);
+    if (el.detail.open && el.detail.dataset.id === String(m.tmdb_id)) $("detail-watch").innerHTML = watchButtonsHtml(m);
+  }
+
+  function lookupWatchLinks(m) {
+    if (!watchApiAvailable || !needsWatchLookup(m) || m._watchLookedUp) return;
+    if (watchLookups.has(m.tmdb_id)) return;
+    const p = fetch(`../api/watch-links?kind=${encodeURIComponent(m.kind)}&id=${encodeURIComponent(m.tmdb_id)}`, { cache: "no-store" })
+      .then(async (resp) => {
+        if (resp.status === 404) {
+          const body = await resp.json().catch(() => ({}));
+          // 404 from the API means "title not cached"; a plain 404 page means there is no API at all.
+          if (!body || !body.error) watchApiAvailable = false;
+          return;
+        }
+        if (!resp.ok) return;
+        const body = await resp.json();
+        m._watchLookedUp = true;
+        if (body.watch_urls && Object.keys(body.watch_urls).length) {
+          m.watch_urls = { ...(m.watch_urls || {}), ...body.watch_urls };
+          m.watch_app_urls = { ...(m.watch_app_urls || {}), ...(body.watch_app_urls || {}) };
+          refreshWatchLinks(m);
+        }
+        if (body.enabled === false && !Object.keys(body.watch_urls || {}).length) watchApiAvailable = false;
+      })
+      .catch(() => { /* offline or no server: keep search links */ })
+      .finally(() => watchLookups.delete(m.tmdb_id));
+    watchLookups.set(m.tmdb_id, p);
   }
 
   function closeDetail() {

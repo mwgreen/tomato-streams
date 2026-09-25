@@ -51,6 +51,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--limit", type=int, metavar="N", help="process at most N movies (for testing)")
     p.add_argument("--skip-scores", action="store_true",
                    help="do not contact OMDb / Rotten Tomatoes (TMDB only; keeps cached scores)")
+    p.add_argument("--watch-links", action="store_true",
+                   help="look up exact Watchmode links for every title now (uses quota); by default "
+                        "serve.py looks titles up on demand when you open them")
     p.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     return p.parse_args(argv)
 
@@ -144,10 +147,13 @@ def main(argv=None) -> int:
 
     omdb = rt = watchmode = None
     watchmode_key = os.environ.get("WATCHMODE_API_KEY", "")
-    if watchmode_key and not args.skip_scores:
-        watchmode = WatchmodeClient(watchmode_key, usage_file=Path(args.cache_dir) / "watchmode_usage.json")
-    elif not watchmode_key:
-        log.info("WATCHMODE_API_KEY not set; Watch buttons will use service search pages")
+    if args.watch_links:
+        if watchmode_key:
+            watchmode = WatchmodeClient(watchmode_key, usage_file=Path(args.cache_dir) / "watchmode_usage.json")
+        else:
+            log.warning("--watch-links needs WATCHMODE_API_KEY in .env; skipping bulk lookups")
+    elif watchmode_key:
+        log.info("Watchmode links are looked up on demand by serve.py (pass --watch-links to prefill all titles)")
     if not args.skip_scores:
         omdb_key = os.environ.get("OMDB_API_KEY", "")
         if omdb_key:
