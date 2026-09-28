@@ -33,6 +33,21 @@ final class CatalogStore: ObservableObject {
         return catalogs[kind]?.movies.first { $0.tmdbId == title.tmdbId } ?? title
     }
 
+    /// Refresh unless the last successful refresh is more recent than `seconds`.
+    func refreshIfStale(olderThan seconds: TimeInterval) async {
+        if let last = lastRefresh, Date().timeIntervalSince(last) < seconds { return }
+        await refresh()
+    }
+
+    /// When the server last ran sync.py, from the catalog's generated_at (ISO 8601).
+    func generatedDate(_ kind: Kind) -> Date? {
+        guard let text = catalogs[kind]?.generatedAt else { return nil }
+        let iso = ISO8601DateFormatter()
+        if let d = iso.date(from: text) { return d }
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return iso.date(from: text)
+    }
+
     /// Re-download both catalogs. Safe to call often; errors are reported, not thrown.
     func refresh() async {
         guard !isRefreshing else { return }

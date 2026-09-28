@@ -792,7 +792,7 @@
     for (const m of data.movies) { m.rt = m.rt || {}; m.services = m.services || []; m.genres = m.genres || []; m.kind = m.kind || KIND; }
     if (data.generated_at) {
       const d = new Date(data.generated_at);
-      el.generated.textContent = `data from ${isNaN(d) ? data.generated_at : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}`;
+      el.generated.textContent = `updated ${isNaN(d) ? data.generated_at : d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
       el.generated.title = data.generated_at;
     }
     if (data.tracking_since) {
@@ -808,6 +808,36 @@
     wire();
     refresh();
   }
+
+  // ---------------------------------------------------------------------
+  // Keep a long-open page current: re-fetch when the tab becomes visible and
+  // every 15 minutes; only re-render when the server has a newer sync.
+  // ---------------------------------------------------------------------
+  let lastCheck = Date.now();
+  async function checkForNewData() {
+    lastCheck = Date.now();
+    try {
+      const resp = await fetch(DATA_URL, { cache: "no-store" });
+      if (!resp.ok) return;
+      const json = await resp.json();
+      if (json.generated_at && json.generated_at !== data.generated_at) {
+        data = { movies: [], services: [], ui_defaults: {}, ...json };
+        for (const m of data.movies) { m.rt = m.rt || {}; m.services = m.services || []; m.genres = m.genres || []; m.kind = m.kind || KIND; }
+        const d = new Date(data.generated_at);
+        el.generated.textContent = `updated ${isNaN(d) ? data.generated_at : d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
+        buildServiceChecks();
+        buildGenreChecks();
+        stateToForm();
+        refresh();
+      }
+      const remote = await watchedRequest("../api/watched");
+      if (remote && Array.isArray(remote.people)) { watched = remote; saveWatchedLocal(); renderPeople(); refresh(); }
+    } catch { /* offline: keep what we have */ }
+  }
+  setInterval(checkForNewData, 15 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && Date.now() - lastCheck > 60 * 1000) checkForNewData();
+  });
 
   boot();
 })();

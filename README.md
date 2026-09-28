@@ -152,7 +152,7 @@ service, score coverage and failures. OMDb usage is tracked in
   service (`services_first_seen` in the cache, `added` in the JSON). Everything present
   on the very first sync gets that day's date and shows as "before <date>"; titles that
   appear on later syncs get their real arrival date, a **New** tag for 30 days, and can
-  be sorted with "Recently added". Run the sync regularly (weekly is fine) for this to
+  be sorted with "Recently added". Run the sync regularly (daily is cheap) for this to
   be useful; a title that leaves a service and returns counts as new again.
 - Sort: critic score, audience score, combined average, critic review count, year, title.
   Ties are broken by review count.
@@ -209,18 +209,21 @@ then see [`tvos/README.md`](tvos/README.md) for building it with Xcode.
 
 ## Running on sanctarus
 
-The always-on copy runs on the home server as systemd services, with a weekly sync
+The always-on copy runs on the home server as systemd services, with a daily sync
 timer, at https://tomato.sanctarus.com (and http://192.168.68.77:8765 at home). Setup,
 deploys and logs: [`deploy/README.md`](deploy/README.md).
 
-## Scheduling weekly refreshes
+## Scheduling refreshes
 
-The cache means a weekly run only re-fetches changed availability and scores older
-than `cache_days_scores`.
+Run the sync daily: the cache means a run only re-checks availability every
+`cache_days_providers` days and scores every `cache_days_scores` days, so a daily run is
+a few minutes and keeps the "updated" line in the apps current. The apps re-fetch the
+catalog on their own every hour while open, so a new sync shows up without restarting
+anything.
 
-**cron** (Linux/macOS), every Sunday at 06:00:
+**cron** (Linux/macOS), every day at 06:00:
 ```
-0 6 * * 0  cd /path/to/tomato-streams && /path/to/.venv/bin/python sync.py >> sync.log 2>&1
+0 6 * * *  cd /path/to/tomato-streams && /path/to/.venv/bin/python sync.py >> sync.log 2>&1
 ```
 
 **launchd** (macOS): save as `~/Library/LaunchAgents/com.user.streaming-finder.plist`
@@ -235,7 +238,7 @@ and load with `launchctl load ~/Library/LaunchAgents/com.user.streaming-finder.p
   </array>
   <key>WorkingDirectory</key><string>/path/to/tomato-streams</string>
   <key>StartCalendarInterval</key><dict>
-    <key>Weekday</key><integer>0</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer>
+    <key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer>
   </dict>
   <key>StandardOutPath</key><string>/path/to/tomato-streams/sync.log</string>
   <key>StandardErrorPath</key><string>/path/to/tomato-streams/sync.log</string>

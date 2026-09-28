@@ -28,8 +28,10 @@ struct BrowseView: View {
                     FilterBar(filters: $filters, services: store.services(kind), genres: catalog?.allGenres ?? [], people: watched.people, kind: kind)
                     HStack {
                         Text("\(titles.count) \(kind.noun)").foregroundStyle(.secondary)
-                        if let generated = catalog?.generatedAt {
-                            Text("· data from \(String(generated.prefix(10)))").foregroundStyle(.tertiary)
+                        if let generated = store.generatedDate(kind) {
+                            // Relative and refreshed with the view, so it never sits on a stale date.
+                            Text("· updated \(generated, format: .relative(presentation: .named))")
+                                .foregroundStyle(Date().timeIntervalSince(generated) > 2 * 86400 ? .orange : .tertiary)
                         }
                         Spacer()
                         if store.isRefreshing { ProgressView().scaleEffect(0.7) }

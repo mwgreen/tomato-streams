@@ -8,7 +8,7 @@ at `/home/mwgreen/git-repos/tomato-streams`, tracking `main`.
 | Web app + API | `tomato-streams.service`, `serve.py --host 0.0.0.0 --port 8765` |
 | Public URL | https://tomato.sanctarus.com (cloudflared tunnel → localhost:8765, Cloudflare Access: Matt + Deb) |
 | Home network | http://192.168.68.77:8765 — the Apple TV app finds it via Bonjour (it can't pass the Access login) |
-| Weekly sync | `tomato-streams-sync.timer`, Sundays 06:00 America/Denver time → `sync.py` |
+| Daily sync | `tomato-streams-sync.timer`, every day 06:00 America/Denver time → `sync.py` (cheap: the cache means only new titles and stale scores are fetched) |
 | Secrets | `.env` on the box only (TMDB, OMDb, Watchmode keys) |
 | State | `cache/`, `data/*.json` (incl. `data/watched.json`) on the box only |
 

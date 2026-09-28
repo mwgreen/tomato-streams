@@ -23,10 +23,18 @@ struct StreamingFinderApp: App {
                 .environmentObject(hidden)
                 .environmentObject(watched)
                 .task { await store.refresh(); await watched.load() }
+                .task {
+                    // Left on screen for hours or days: keep picking up new syncs and watched marks.
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(30 * 60))
+                        await store.refreshIfStale(olderThan: 60 * 60)
+                        await watched.load()
+                    }
+                }
                 .onChange(of: scenePhase) { _, phase in
-                    // Coming back from a streaming app: pick up a fresh sync if there is one.
-                    if phase == .active, let last = store.lastRefresh, Date().timeIntervalSince(last) > 6 * 3600 {
-                        Task { await store.refresh(); await watched.load() }
+                    // Waking up or coming back from a streaming app: refresh if it has been a while.
+                    if phase == .active {
+                        Task { await store.refreshIfStale(olderThan: 15 * 60); await watched.load() }
                     }
                 }
         }

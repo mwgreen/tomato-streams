@@ -1,8 +1,8 @@
 [Unit]
-Description=Run the Tomato Streams sync weekly
+Description=Run the Tomato Streams sync daily
 
 [Timer]
-OnCalendar=Sun *-*-* 06:00:00 America/Denver
+OnCalendar=*-*-* 06:00:00 America/Denver
 Persistent=true
 RandomizedDelaySec=15m
 
