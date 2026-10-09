@@ -27,3 +27,4 @@ DerivedData/
 
 # macOS Finder
 .DS_Store
+tvos/build/

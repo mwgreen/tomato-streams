@@ -46,6 +46,18 @@ tvos/install-appletv.sh "Living Room"      # another paired Apple TV
 
 The team id and bundle id live in `project.yml`, so regenerating the project keeps them.
 
+### Keeping it installed (atvloadly on sanctarus)
+
+The free-team profile lasts 7 days. Signing and reinstalling run on sanctarus with
+[atvloadly](https://github.com/bitxeno/atvloadly), set up alongside TabloTV (see
+tablo-proxy's `tvos/README.md`), and it re-signs nightly. A push to main that touches
+`tvos/` runs `.github/workflows/tvos-ipa.yml`, which builds an unsigned IPA
+(`tvos/scripts/build-ipa.sh`) and publishes it as a `tvos-N` release. atvloadly picks
+the release up within 6 hours. This repo is private, so atvloadly needs a read-only
+GitHub token in its settings. atvloadly installs the app as
+`com.mwgreen.streamingfinder.<TEAM_ID>`, a separate app from the one
+`install-appletv.sh` installs.
+
 ## Using it
 
 - **Movies / TV Series** tabs: two rows of filters above a poster grid. The first row
