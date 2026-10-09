@@ -142,7 +142,8 @@ struct DetailView: View {
 
     private func openTrailer() {
         guard let key = current.trailerYoutubeKey else { return }
-        let candidates = ["youtube://watch?v=\(key)", "https://www.youtube.com/watch?v=\(key)"].compactMap(URL.init(string:))
+        // youtube://watch/<id> is what the tvOS YouTube app accepts; the others are fallbacks.
+        let candidates = ["youtube://watch/\(key)", "youtube://watch?v=\(key)", "https://www.youtube.com/watch?v=\(key)"].compactMap(URL.init(string:))
         func attempt(_ i: Int) {
             guard i < candidates.count else { openFailed = "YouTube is not installed on this Apple TV."; return }
             UIApplication.shared.open(candidates[i], options: [:]) { ok in if !ok { attempt(i + 1) } }

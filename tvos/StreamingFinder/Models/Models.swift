@@ -226,7 +226,7 @@ struct Filters: Codable, Equatable {
     /// Filter + sort. `hidden` are title ids the user hid; `hideNoScore` drops titles without RT scores.
     func apply(_ titles: [Title], hidden: Set<String>, showHidden: Bool, hideNoScore: Bool,
                query: String = "", watched: [String: [String: String]] = [:]) -> [Title] {
-        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let search = TitleSearch(query)
         let onlyService: Set<String>? = services.isEmpty ? nil : services
         let yearKey = yearFrom.map { "\($0)-01-01" }
         let addedKeyMin: String? = addedWithinDays.flatMap { days in
@@ -246,7 +246,7 @@ struct Filters: Codable, Equatable {
             if let addedKeyMin {
                 guard let ak = t.addedKey(services: onlyService), ak >= addedKeyMin else { return false }
             }
-            if !q.isEmpty && !t.title.lowercased().contains(q) && !(t.originalTitle ?? "").lowercased().contains(q) { return false }
+            if !search.isEmpty && !search.matches(t) { return false }
             return true
         }
         let count = { (t: Title) in t.rt.criticCount ?? 0 }
@@ -277,4 +277,64 @@ struct Filters: Codable, Equatable {
         f.dateFormat = "yyyy-MM-dd"
         return f.string(from: date)
     }
+}
+
+/// Loose title matching for search, forgiving of how Siri dictation spells things.
+struct TitleSearch {
+    let words: [String]
+
+    init(_ query: String) { words = Self.words(query) }
+
+    var isEmpty: Bool { words.isEmpty }
+
+    /// Every query word must start some word of the title (any order), so "100 years of solitude",
+    /// "solitude hundred" and "one hundred yea" all find "One Hundred Years of Solitude".
+    func matches(_ t: Title) -> Bool { rank(t) != nil }
+
+    /// nil = no match; lower is better: 0 exact title, 1 title starts with the query, 2 query is a
+    /// phrase inside the title, 3 words matched out of order.
+    func rank(_ t: Title) -> Int? {
+        [t.title, t.originalTitle].compactMap { $0 }.compactMap { rank(Self.words($0)) }.min()
+    }
+
+    private func rank(_ title: [String]) -> Int? {
+        guard !words.isEmpty, words.allSatisfy({ w in title.contains { $0.hasPrefix(w) } }) else { return nil }
+        if title == words { return 0 }
+        func phrase(at i: Int) -> Bool {
+            i + words.count <= title.count && zip(words, title[i...]).allSatisfy { $1.hasPrefix($0) }
+        }
+        if phrase(at: 0) { return 1 }
+        if title.indices.contains(where: phrase) { return 2 }
+        return 3
+    }
+
+    /// Lowercased words with accents, apostrophes and punctuation dropped and numbers spelled out,
+    /// so "100 Years", "One Hundred Years" and "one-hundred years" all become the same words.
+    static func words(_ s: String) -> [String] {
+        let folded = s.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: posix)
+            .replacingOccurrences(of: "'", with: "")
+            .replacingOccurrences(of: "\u{2019}", with: "")
+            .replacingOccurrences(of: "&", with: " and ")
+        var out: [String] = []
+        for token in folded.components(separatedBy: CharacterSet.alphanumerics.inverted) where !token.isEmpty {
+            if let n = Int(token), n < 1_000_000, let spelled = speller.string(from: NSNumber(value: n)) {
+                out += spelled.components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty }
+            } else {
+                out.append(token)
+            }
+        }
+        // "a hundred years" is said for "one hundred years".
+        for i in out.indices.dropLast() where out[i] == "a" && ["hundred", "thousand", "million"].contains(out[i + 1]) {
+            out[i] = "one"
+        }
+        return out
+    }
+
+    private static let posix = Locale(identifier: "en_US_POSIX")
+    private static let speller: NumberFormatter = {
+        let f = NumberFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.numberStyle = .spellOut
+        return f
+    }()
 }

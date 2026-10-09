@@ -7,6 +7,7 @@ struct SearchView: View {
     @EnvironmentObject var hidden: HiddenStore
     @EnvironmentObject var watched: WatchedStore
     @State private var query = ""
+    @State private var path: [Title] = []
 
     private var results: [Title] {
         let q = query.trimmingCharacters(in: .whitespaces)
@@ -15,11 +16,18 @@ struct SearchView: View {
         f.minReviews = 0
         f.sort = .critic
         let all = store.titles(.movie) + store.titles(.tv)
-        return f.apply(all, hidden: hidden.ids, showHidden: settings.showHidden, hideNoScore: false, query: q, watched: watched.watched)
+        let found = f.apply(all, hidden: hidden.ids, showHidden: settings.showHidden, hideNoScore: false, query: q, watched: watched.watched)
+        // Best title match first; within a tier keep the critic-score order from apply.
+        let search = TitleSearch(q)
+        return found.enumerated()
+            .map { (rank: search.rank($1) ?? 9, index: $0, title: $1) }
+            .sorted { ($0.rank, $0.index) < ($1.rank, $1.index) }
+            .map(\.title)
     }
 
     var body: some View {
-        NavigationStack {
+        let results = results   // computed once per render, not once per use
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     if results.isEmpty {
@@ -32,8 +40,11 @@ struct SearchView: View {
                 }
                 .padding(.horizontal, 60).padding(.bottom, 60)
             }
+            // Search belongs to the results page, inside the stack: attached outside it, the keyboard
+            // stayed on screen over an opened title and typing updated results hidden behind it.
+            .searchable(text: $query, prompt: "Movie or series title")
             .navigationDestination(for: Title.self) { DetailView(title: $0) }
         }
-        .searchable(text: $query, prompt: "Movie or series title")
+        .onChange(of: query) { path = [] }   // a new search always shows its results
     }
 }

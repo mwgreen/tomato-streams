@@ -18,6 +18,9 @@ enum DeepLinks {
         var rewrites: [(pattern: String, template: String)] = []
         /// If true, also try the https URL itself (Apple's TV app handles tv.apple.com).
         var tryWeb: Bool = false
+        /// https page the app claims as a universal link, tried after the home schemes. For apps
+        /// whose tvOS build registers no custom scheme (Disney+), so canOpenURL can't see them.
+        var webHome: String? = nil
     }
 
     /// Keyed by service slug (see `slug(_:)`), same slugs as the web app's badges.
@@ -30,9 +33,8 @@ enum DeepLinks {
             (#"hulu\.com/series/[^/?#]*?([0-9a-f]{8}-[0-9a-f-]{27})"#, "hulu://series/$1"),
             (#"hulu\.com/movie/[^/?#]*?([0-9a-f]{8}-[0-9a-f-]{27})"#, "hulu://movie/$1"),
         ]),
-        "disney": Rule(home: "disneyplus://", rewrites: [
-            (#"disneyplus\.com(/[^?#]*)"#, "disneyplus://www.disneyplus.com$1"),
-        ]),
+        // The tvOS app opens disneyplus.com links directly; disneyplus:// is iOS-only.
+        "disney": Rule(home: "disneyplus://", tryWeb: true, webHome: "https://www.disneyplus.com/"),
         "hbo-max": Rule(home: "hbomax://", altHomes: ["max://"], rewrites: [
             (#"/movie/([0-9a-f-]{36})"#, "hbomax://feature/$1"),
             (#"/show/([0-9a-f-]{36})"#, "hbomax://series/$1"),
@@ -57,7 +59,7 @@ enum DeepLinks {
         "crunchyroll": Rule(home: "crunchyroll://"),
         "hallmark": Rule(home: "hallmarkplus://"),
         "youtube-premium": Rule(home: "youtube://", rewrites: [
-            (#"[?&]v=([A-Za-z0-9_-]{6,})"#, "youtube://watch?v=$1"),
+            (#"[?&]v=([A-Za-z0-9_-]{6,})"#, "youtube://watch/$1"),   // tvOS form; ?v= doesn't open
         ]),
         "tubi": Rule(home: "tubitv://"),
         "pluto-tv": Rule(home: "plutotv://"),
@@ -99,7 +101,11 @@ enum DeepLinks {
             }
             if rule.tryWeb { urls.append(web) }
         }
-        if let rule { urls.append(rule.home); urls.append(contentsOf: rule.altHomes) }
+        if let rule {
+            urls.append(rule.home)
+            urls.append(contentsOf: rule.altHomes)
+            if let web = rule.webHome { urls.append(web) }
+        }
         var seen = Set<String>()
         return urls.compactMap { s in
             guard !seen.contains(s), let u = URL(string: s) else { return nil }
