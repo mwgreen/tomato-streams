@@ -93,7 +93,7 @@ sync:
   monetization_types: [flatrate] # subscription only. Add `free` for Tubi/Pluto-style
                                  # ad-supported services; never `rent`/`buy`.
   min_tmdb_vote_count: 50        # skip ultra-obscure titles at discovery time
-  max_pages_per_service: 50      # TMDB pages of 20 results each
+  max_pages_per_service: 150     # TMDB pages of 20 results each; 50 cut Netflix, Prime and Disney+ off at 1,000
   cache_days_scores: 7           # re-fetch RT/OMDb scores after N days
   cache_days_providers: 2        # re-check streaming availability after N days
   cache_days_watch_links: 30     # re-fetch Watchmode links after N days (only with WATCHMODE_API_KEY)
