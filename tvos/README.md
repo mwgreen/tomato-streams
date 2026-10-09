@@ -50,7 +50,7 @@ The team id and bundle id live in `project.yml`, so regenerating the project kee
 
 The free-team profile lasts 7 days. Signing and reinstalling run on sanctarus with
 [atvloadly](https://github.com/bitxeno/atvloadly), set up alongside TabloTV (see
-tablo-proxy's `tvos/README.md`), and it re-signs nightly. A push to main that touches
+tablo-proxy's `tvos/README.md`), and it re-signs the app in the early hours once it's within 3 days of expiring. A push to main that touches
 `tvos/` runs `.github/workflows/tvos-ipa.yml`, which builds an unsigned IPA
 (`tvos/scripts/build-ipa.sh`) and publishes it as a `tvos-N` release. atvloadly picks
 the release up within 6 hours. atvloadly installs the app as
