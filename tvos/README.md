@@ -53,8 +53,7 @@ The free-team profile lasts 7 days. Signing and reinstalling run on sanctarus wi
 tablo-proxy's `tvos/README.md`), and it re-signs nightly. A push to main that touches
 `tvos/` runs `.github/workflows/tvos-ipa.yml`, which builds an unsigned IPA
 (`tvos/scripts/build-ipa.sh`) and publishes it as a `tvos-N` release. atvloadly picks
-the release up within 6 hours. This repo is private, so atvloadly needs a read-only
-GitHub token in its settings. atvloadly installs the app as
+the release up within 6 hours. atvloadly installs the app as
 `com.mwgreen.streamingfinder.<TEAM_ID>`, a separate app from the one
 `install-appletv.sh` installs.
 
