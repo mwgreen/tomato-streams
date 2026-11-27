@@ -50,6 +50,7 @@
     q: "", services: null /* null = all */, mc: 0, ma: 0,
     mr: Number(data.ui_defaults.min_critic_reviews ?? 20),
     cf: false, hn: true, g: [], y0: "", y1: "", a0: "", rt: "", sh: false, hw: [],
+    wk: "" /* Watchlist page: "" = movies and series, "movie" or "tv" */,
     sort: data.ui_defaults.sort || "critic_desc",
     view: storedView(),
   });
@@ -99,6 +100,7 @@
     if (p.has("hw")) s.hw = p.get("hw") ? p.get("hw").split(",") : [];
     if (p.has("rt")) s.rt = p.get("rt");
     if (p.has("sh")) s.sh = p.get("sh") === "1";
+    if (p.has("wk")) s.wk = ["movie", "tv"].includes(p.get("wk")) ? p.get("wk") : "";
     if (p.has("sort")) s.sort = p.get("sort");
     if (p.has("v") && VIEWS.includes(p.get("v"))) s.view = p.get("v");
     return s;
@@ -121,6 +123,7 @@
     if (state.hw.length) p.set("hw", state.hw.join(","));
     if (state.rt) p.set("rt", state.rt);
     if (state.sh) p.set("sh", "1");
+    if (state.wk) p.set("wk", state.wk);
     if (state.sort !== d.sort) p.set("sort", state.sort);
     if (state.view !== "grid") p.set("v", state.view);
     const hash = p.toString();
@@ -378,7 +381,7 @@
       if (genres.size && !(m.genres || []).some((g) => genres.has(g))) return false;
       if (q && !norm(m.title).includes(q) && !norm(m.original_title).includes(q)) return false;
       // The Watchlist page shows what is on the list; score, date and runtime filters do not apply there.
-      if (WATCHLIST) return onWatchlist(m);
+      if (WATCHLIST) return onWatchlist(m) && (!state.wk || m.kind === state.wk);
       const isHidden = hidden.has(m.tmdb_id);
       if (isHidden && !state.sh) return false;
       const rt = m.rt || {};
@@ -440,6 +443,9 @@
     el.listWrap.hidden = !list;
     for (const b of document.querySelectorAll(".view-toggle [data-view]")) {
       b.setAttribute("aria-pressed", String(b.dataset.view === state.view));
+    }
+    for (const b of document.querySelectorAll(".kind-toggle [data-wk]")) {
+      b.setAttribute("aria-pressed", String(b.dataset.wk === state.wk));
     }
     for (const th of el.list.querySelectorAll("th.sortable")) {
       th.classList.toggle("sorted", th.dataset.sort === state.sort || th.dataset.sortAlt === state.sort);
@@ -820,6 +826,10 @@
     // grid / list
     for (const b of document.querySelectorAll(".view-toggle [data-view]")) {
       b.addEventListener("click", () => { if (state.view !== b.dataset.view) { state.view = b.dataset.view; refresh(); } });
+    }
+    // Watchlist page: all / movies / series
+    for (const b of document.querySelectorAll(".kind-toggle [data-wk]")) {
+      b.addEventListener("click", () => { if (state.wk !== b.dataset.wk) { state.wk = b.dataset.wk; refresh(); } });
     }
     for (const th of el.list.querySelectorAll("th.sortable")) {
       th.addEventListener("click", () => {

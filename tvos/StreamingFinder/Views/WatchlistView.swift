@@ -5,6 +5,8 @@ import SwiftUI
 struct WatchlistView: View {
     @EnvironmentObject var store: CatalogStore
     @EnvironmentObject var watched: WatchedStore
+    /// "" = movies and series, otherwise "movie" or "tv". Remembered between launches.
+    @AppStorage("watchlist.kind") private var kindFilter = ""
 
     /// A watchlist entry whose title is in neither catalog any more.
     private struct Gone: Identifiable {
@@ -36,18 +38,31 @@ struct WatchlistView: View {
     }
 
     var body: some View {
-        let titles = titles   // computed once per render, not once per use
-        let missing = gone(besides: titles)
+        // Work out what has left the catalog from the whole list, then narrow both to the chosen kind.
+        let everything = self.titles
+        let shown = everything.filter { kindFilter.isEmpty || $0.kind == kindFilter }
+        let missing = gone(besides: everything).filter { kindFilter.isEmpty || $0.id.hasPrefix(kindFilter + "-") }
+        let isEmpty = watched.watchlist.isEmpty
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    if titles.isEmpty && missing.isEmpty {
-                        Text("Your watchlist is empty.\nOpen a movie or series and choose Add to Watchlist.")
+                    if !isEmpty {
+                        Picker("Show", selection: $kindFilter) {
+                            Text("All").tag("")
+                            Text("Movies").tag("movie")
+                            Text("Series").tag("tv")
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 700)
+                    }
+                    if shown.isEmpty && missing.isEmpty {
+                        Text(isEmpty ? "Your watchlist is empty.\nOpen a movie or series and choose Add to Watchlist."
+                                     : "No \(kindFilter == "tv" ? "series" : "movies") on your watchlist.")
                             .multilineTextAlignment(.center).foregroundStyle(.secondary)
                             .padding(.top, 80).frame(maxWidth: .infinity)
                     } else {
-                        Text("\(titles.count + missing.count) on your watchlist").font(.callout).foregroundStyle(.secondary)
-                        TitleGrid(titles: titles)
+                        Text("\(shown.count + missing.count) on your watchlist").font(.callout).foregroundStyle(.secondary)
+                        TitleGrid(titles: shown)
                     }
                     if !missing.isEmpty {
                         Text("Not on your services right now").font(.headline).padding(.top, 20)

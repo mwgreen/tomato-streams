@@ -116,6 +116,7 @@ input[type="date"] { width: 100%; padding: 6px 9px; background: var(--bg); borde
 .view-toggle .btn { border-radius: 0; padding: 6px 11px; }
 .view-toggle .btn:first-child { border-radius: 6px 0 0 6px; }
 .view-toggle .btn:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+.kind-toggle .btn + .btn { margin-left: -1px; }
 .view-toggle .btn[aria-pressed="true"] { background: #2c3240; border-color: #4a5160; color: #fff; }
 
 /* --- list view ------------------------------------------------------ */
@@ -266,6 +267,7 @@ a.badge:hover, a.badge:focus-visible { filter: brightness(1.3); outline: none; b
 .wl-btn-wide[aria-pressed="true"] { border-color: var(--accent-2); }
 .watchlist-row { margin: 0 0 12px; }
 .off-watchlist { opacity: .45; }
+body:not(.kind-watchlist) .only-watchlist { display: none; }
 body.kind-watchlist .not-watchlist, body.kind-watchlist .hide-btn { display: none; }
 .empty { color: var(--muted); text-align: center; padding: 40px 0; }
 .sentinel { height: 1px; }

@@ -192,7 +192,8 @@ service, score coverage and failures. OMDb usage is tracked in
 - **Watchlist.** Tap the ＋ on a card or list row, or "Add to watchlist" on a title's
   detail page, to put a movie or series on the watchlist; tap again to take it off. The
   **Watchlist** tab shows both kinds together, with the search, service, genre and
-  "watched by" filters (score and date filters do not apply there). It is one list for
+  "watched by" filters (score and date filters do not apply there), and an
+  All / Movies / Series switch above the grid. It is one list for
   the household, stored by `serve.py` in `data/watched.json` and shared with the Apple
   TV app. A title that later leaves all your services stays on the list, marked "not
   streaming", until you remove it.

@@ -74,7 +74,8 @@ the release up within 6 hours. atvloadly installs the app as
 - **Hide title** on the title page keeps a title out of the grid (local to the Apple TV).
 - **Watchlist**: **Add to Watchlist** on a title page puts a movie or series on the
   list (press again to take it off); a yellow bookmark marks it on its poster. The
-  **Watchlist** tab shows both kinds together, newest addition first, and lists entries
+  **Watchlist** tab shows both kinds together, newest addition first, with an All / Movies / Series
+  switch on top, and lists entries
   that have left your services with a Remove button. The list is shared with the web
   app via `serve.py`.
 - **Watched by**: add people under Settings → People, mark a title on its page with the
