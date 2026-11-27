@@ -10,8 +10,11 @@ GET /api/ping                  -> {"ok": true, ...}   (used by the Apple TV app 
 GET /api/watched               -> {"people": [...], "watched": {"movie-123": {"Matt": "2026-09-25"}}}
 POST /api/people   {"add": "Matt"} | {"remove": "Matt"} | {"people": [...]}   -> same as GET /api/watched
 POST /api/watched  {"id": "movie-123", "person": "Matt", "watched": true}     -> same as GET /api/watched
-    People and "watched by" marks are shared by the web app and the Apple TV app
-    (data/watched.json).
+POST /api/watchlist {"id": "movie-123", "on": true, "title": "Heat", "year": 1995, "poster": "https://..."}
+                                                                              -> same as GET /api/watched
+    People, "watched by" marks and the watchlist are shared by the web app and the
+    Apple TV app (data/watched.json). GET /api/watched also returns
+    "watchlist": {"movie-123": {"added": "2026-11-27", "title": "Heat", ...}}.
 GET /api/watch-links?kind=movie|tv&id=<tmdb id>
     -> {"enabled": bool, "watch_urls": {service: url}, "watch_app_urls": {service: url}}
     Looks the title up on Watchmode the first time (if WATCHMODE_API_KEY is set),
@@ -201,6 +204,8 @@ class Handler(SimpleHTTPRequestHandler):
                     raise WatchedError("send {\"add\": name}, {\"remove\": name} or {\"people\": [...]}")
             elif url.path == "/api/watched":
                 payload = self.ctx.watched.mark(body.get("id"), body.get("person"), bool(body.get("watched", True)))
+            elif url.path == "/api/watchlist":
+                payload = self.ctx.watched.set_watchlist(body.get("id"), bool(body.get("on", True)), body)
             else:
                 self._send_json(404, {"error": "unknown API endpoint"})
                 return

@@ -189,6 +189,13 @@ service, score coverage and failures. OMDb usage is tracked in
   Those URL templates live in `web/watch-links.js`; edit that file if a service changes
   its site. The × on a card hides a title (stored in your browser); toggle
   "Show hidden" to bring them back.
+- **Watchlist.** Tap the ＋ on a card or list row, or "Add to watchlist" on a title's
+  detail page, to put a movie or series on the watchlist; tap again to take it off. The
+  **Watchlist** tab shows both kinds together, with the search, service, genre and
+  "watched by" filters (score and date filters do not apply there). It is one list for
+  the household, stored by `serve.py` in `data/watched.json` and shared with the Apple
+  TV app. A title that later leaves all your services stays on the list, marked "not
+  streaming", until you remove it.
 - **Watched by.** Add the people in your household under "Watched by" in the sidebar,
   then on a title's detail page tap a name to mark it watched by them. Tick "Hide
   watched by <name>" to drop everything they have seen from the grid. People and marks

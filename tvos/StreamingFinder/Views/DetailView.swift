@@ -44,6 +44,10 @@ struct DetailView: View {
                             .font(.body).lineLimit(8).frame(maxWidth: 900, alignment: .leading)
                         addedLine
                         HStack(spacing: 20) {
+                            Button { Task { await watched.toggleWatchlist(current) } } label: {
+                                Label(watched.isOnWatchlist(current) ? "On Watchlist" : "Add to Watchlist",
+                                      systemImage: watched.isOnWatchlist(current) ? "bookmark.fill" : "bookmark")
+                            }
                             if current.trailerYoutubeKey != nil {
                                 Button { openTrailer() } label: { Label("Trailer", systemImage: "play.rectangle") }
                             }

@@ -45,6 +45,8 @@ img { display: block; max-width: 100%; }
 }
 .kind-nav a:hover { color: var(--text); }
 .kind-nav a.active { color: var(--text); background: var(--bg-card); border-color: var(--border); }
+.nav-count { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--border); color: var(--text); font-size: 11.5px; font-weight: 700; }
+.nav-count:empty { display: none; }
 .topbar-meta { margin-left: auto; flex-shrink: 0; display: flex; gap: 12px; align-items: baseline; color: var(--muted); font-size: 13px; }
 .topbar .count { color: var(--text); font-weight: 600; white-space: nowrap; }
 #toggle-filters { display: none; }
@@ -141,7 +143,8 @@ input[type="date"] { width: 100%; padding: 6px 9px; background: var(--bg); borde
 .list .col-score { white-space: nowrap; font-weight: 700; }
 .list .col-score .score svg { width: 18px; height: 18px; }
 .list .col-services { min-width: 120px; }
-.list .col-actions { width: 34px; padding-left: 0; }
+.list .col-actions { width: 64px; padding-left: 0; white-space: nowrap; }
+body.kind-watchlist .list .col-actions { width: 34px; }
 .list .hide-btn { width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer; background: rgba(255, 255, 255, .08); color: var(--muted); font-size: 13px; line-height: 1; }
 .list .hide-btn:hover { background: var(--accent); color: #fff; }
 
@@ -246,6 +249,24 @@ a.badge:hover, a.badge:focus-visible { filter: brightness(1.3); outline: none; b
 }
 .card:hover .hide-btn, .card:focus-within .hide-btn, .card.is-hidden .hide-btn { opacity: 1; }
 .card .hide-btn:hover { background: var(--accent); }
+
+/* --- watchlist ------------------------------------------------------ */
+.wl-btn { border: 0; cursor: pointer; font-family: inherit; }
+.card .wl-btn {
+  position: absolute; top: 6px; left: 6px; z-index: 2;
+  width: 26px; height: 26px; border-radius: 50%; padding: 0;
+  background: rgba(0, 0, 0, .65); color: #fff; font-size: 14px; line-height: 1;
+  opacity: 0; transition: opacity .12s;
+}
+.card:hover .wl-btn, .card:focus-within .wl-btn, .card .wl-btn[aria-pressed="true"] { opacity: 1; }
+.list .wl-btn { width: 26px; height: 26px; border-radius: 50%; padding: 0; margin-right: 4px; background: rgba(255, 255, 255, .08); color: var(--muted); font-size: 13px; line-height: 1; }
+.wl-btn:hover { background: #4a5160; color: #fff; }
+.wl-btn[aria-pressed="true"], .card .wl-btn[aria-pressed="true"], .list .wl-btn[aria-pressed="true"] { background: var(--accent-2); color: #1a1200; }
+.wl-btn-wide { padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 14px; font-weight: 600; }
+.wl-btn-wide[aria-pressed="true"] { border-color: var(--accent-2); }
+.watchlist-row { margin: 0 0 12px; }
+.off-watchlist { opacity: .45; }
+body.kind-watchlist .not-watchlist, body.kind-watchlist .hide-btn { display: none; }
 .empty { color: var(--muted); text-align: center; padding: 40px 0; }
 .sentinel { height: 1px; }
 #load-more { display: block; margin: 20px auto 0; }
@@ -284,7 +305,7 @@ a.badge:hover, a.badge:focus-visible { filter: brightness(1.3); outline: none; b
 
 /* --- touch devices & iPhone ---------------------------------------- */
 @media (hover: none) {
-  .card .hide-btn { opacity: .85; }
+  .card .hide-btn, .card .wl-btn { opacity: .85; }
   .card:hover, .card:focus-within { transform: none; }
 }
 body.sidebar-open { overflow: hidden; }

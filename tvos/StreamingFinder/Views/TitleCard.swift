@@ -8,6 +8,7 @@ struct TitleCard: View {
     var isNew = false
     var isHidden = false
     var watchedBy: [String] = []
+    var onWatchlist = false
 
     static let posterWidth: CGFloat = 250
     static var posterHeight: CGFloat { posterWidth * 1.5 }
@@ -21,6 +22,12 @@ struct TitleCard: View {
                         if isNew {
                             Text("NEW").font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 4)
                                 .background(.yellow, in: Capsule()).foregroundStyle(.black).padding(10)
+                        }
+                    }
+                    .overlay(alignment: .topLeading) {
+                        if onWatchlist {
+                            Image(systemName: "bookmark.fill").font(.caption.bold()).padding(8)
+                                .background(.yellow, in: Circle()).foregroundStyle(.black).padding(10)
                         }
                     }
             }

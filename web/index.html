@@ -43,9 +43,10 @@
 <header class="topbar">
   <button id="toggle-filters" class="btn btn-ghost" type="button" aria-controls="sidebar" aria-expanded="false">☰ Filters</button>
   <h1>Streaming Finder</h1>
-  <nav class="kind-nav" aria-label="Movies or TV">
+  <nav class="kind-nav" aria-label="Movies, TV or watchlist">
     <a href="index.html" data-kind="movie">Movies</a>
     <a href="index.html?kind=tv" data-kind="tv">TV Series</a>
+    <a href="index.html?kind=watchlist" data-kind="watchlist">Watchlist<span class="nav-count" id="watchlist-count"></span></a>
   </nav>
   <div class="topbar-meta">
     <span id="count" class="count">Loading…</span>
@@ -71,7 +72,7 @@
         <div id="services" class="checks"></div>
       </fieldset>
 
-      <fieldset>
+      <fieldset class="not-watchlist">
         <legend>Rotten Tomatoes</legend>
         <label class="field">
           <span class="label">Min critic score <output id="min-critic-out">0</output></span>
@@ -94,7 +95,7 @@
         <div id="genres" class="checks checks-compact"></div>
       </fieldset>
 
-      <fieldset>
+      <fieldset class="not-watchlist">
         <legend id="release-legend">Release date</legend>
         <div class="row">
           <input type="text" id="year-min" placeholder="From: 2022" aria-label="Released from (year or YYYY-MM-DD)" title="A year (2022) or a full date (2022-06-01)">
@@ -104,7 +105,7 @@
         <p class="hint">Type a year or a full date like 2022-06-01.</p>
       </fieldset>
 
-      <fieldset>
+      <fieldset class="not-watchlist">
         <legend>Added to service</legend>
         <label class="field">
           <span class="label">On or after</span>
@@ -113,7 +114,7 @@
         <p class="hint" id="added-hint">Tracked by this app since its first sync; earlier arrivals show as “before” that date.</p>
       </fieldset>
 
-      <fieldset>
+      <fieldset class="not-watchlist">
         <legend>Runtime</legend>
         <label class="field">
           <span class="label" id="runtime-label">Max runtime (minutes)</span>
@@ -131,7 +132,7 @@
         </div>
       </fieldset>
 
-      <fieldset>
+      <fieldset class="not-watchlist">
         <legend>Hidden titles</legend>
         <label class="check"><input type="checkbox" id="show-hidden"> Show hidden (<span id="hidden-count">0</span>)</label>
         <button type="button" class="btn btn-small" id="clear-hidden">Un-hide all</button>
@@ -205,6 +206,7 @@
       <p class="detail-added" id="detail-added"></p>
       <div class="watch-row" id="detail-watch"></div>
       <div class="detail-scores" id="detail-scores"></div>
+      <div class="watchlist-row"><button type="button" class="wl-btn wl-btn-wide" id="detail-watchlist"></button></div>
       <div class="watched-row" id="detail-watched"></div>
       <p id="detail-overview" class="detail-overview"></p>
       <div id="detail-trailer" class="detail-trailer"></div>

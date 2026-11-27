@@ -12,6 +12,9 @@ struct RootView: View {
             BrowseView(kind: .tv)
                 .overlay { firstRun }
                 .tabItem { Text("TV Series") }
+            WatchlistView()
+                .overlay { firstRun }
+                .tabItem { Text("Watchlist") }
             SearchView()
                 .tabItem { Image(systemName: "magnifyingglass") }
             SettingsView()   // no overlay here: Settings is where the first-run card sends you

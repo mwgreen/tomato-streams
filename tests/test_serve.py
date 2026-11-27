@@ -96,7 +96,7 @@ class ServeTests(unittest.TestCase):
         self.assertIn("Netflix", cached)
 
     def test_people_and_watched(self):
-        self.assertEqual(self.get("/api/watched")[1], {"people": [], "watched": {}})
+        self.assertEqual(self.get("/api/watched")[1], {"people": [], "watched": {}, "watchlist": {}})
         status, body = self.post("/api/people", {"add": "Matt"})
         self.assertEqual((status, body["people"]), (200, ["Matt"]))
         self.assertEqual(self.post("/api/people", {"add": " deb "})[1]["people"], ["Matt", "deb"])
@@ -118,9 +118,34 @@ class ServeTests(unittest.TestCase):
         self.assertEqual(self.post("/api/nope", {})[0], 404)
         # removing a person drops their marks; the file is what the other app reads
         body = self.post("/api/people", {"remove": "deb"})[1]
-        self.assertEqual(body, {"people": ["Matt"], "watched": {}})
+        self.assertEqual(body, {"people": ["Matt"], "watched": {}, "watchlist": {}})
         self.assertTrue((self.root / "data" / "watched.json").exists())
         self.assertEqual(self.post("/api/people", {"people": ["Deb", "Matt", "Deb"]})[1]["people"], ["Deb", "Matt"])
+
+    def test_watchlist(self):
+        status, body = self.post("/api/watchlist", {"id": "movie-949", "on": True, "title": "  Heat ", "year": 1995,
+                                                    "poster": "https://image.tmdb.org/t/p/w342/x.jpg", "junk": "x"})
+        self.assertEqual(status, 200)
+        entry = body["watchlist"]["movie-949"]
+        self.assertRegex(entry.pop("added"), r"^\d{4}-\d{2}-\d{2}$")
+        self.assertEqual(entry, {"title": "Heat", "year": 1995, "poster": "https://image.tmdb.org/t/p/w342/x.jpg"})
+        # series too; bad year / foreign poster URLs are dropped, "on" defaults to true
+        body = self.post("/api/watchlist", {"id": "tv-7", "title": "Dark", "year": "soon", "poster": "https://evil.example/x.jpg"})[1]
+        self.assertEqual(sorted(body["watchlist"]), ["movie-949", "tv-7"])
+        self.assertEqual(sorted(body["watchlist"]["tv-7"]), ["added", "title"])
+        # adding again keeps the first entry
+        body = self.post("/api/watchlist", {"id": "movie-949", "on": True, "title": "Other"})[1]
+        self.assertEqual(body["watchlist"]["movie-949"]["title"], "Heat")
+        # it is part of the shared snapshot and survives people changes
+        self.post("/api/people", {"add": "Matt"})
+        self.post("/api/people", {"remove": "Matt"})
+        self.assertEqual(sorted(self.get("/api/watched")[1]["watchlist"]), ["movie-949", "tv-7"])
+        # remove (twice is fine), bad ids
+        body = self.post("/api/watchlist", {"id": "movie-949", "on": False})[1]
+        self.assertEqual(list(body["watchlist"]), ["tv-7"])
+        self.assertEqual(self.post("/api/watchlist", {"id": "movie-949", "on": False})[0], 200)
+        for bad in ("x", "movie-", "book-1", "movie-1/../x", None):
+            self.assertEqual(self.post("/api/watchlist", {"id": bad})[0], 400)
 
     def test_ping(self):
         status, body = self.get("/api/ping")

@@ -1,16 +1,28 @@
 import Foundation
 
-/// People and "watched by" marks, shared with the web app through serve.py
-/// (GET/POST /api/watched, POST /api/people). Cached locally so the grid can filter offline.
+/// One watchlist entry. The server keeps the title, year and poster with it so the entry
+/// can still be shown after the title leaves every streaming service.
+struct WatchlistEntry: Codable, Hashable {
+    var added: String?
+    var title: String?
+    var year: Int?
+    var poster: String?
+}
+
+/// People, "watched by" marks and the watchlist, shared with the web app through serve.py
+/// (GET/POST /api/watched, POST /api/people, POST /api/watchlist). Cached locally so the
+/// grid can filter offline.
 @MainActor
 final class WatchedStore: ObservableObject {
     struct Snapshot: Codable {
         var people: [String] = []
         var watched: [String: [String: String]] = [:]   // title id -> person -> date
+        var watchlist: [String: WatchlistEntry]? = nil  // title id -> entry; nil from a server older than the watchlist
     }
 
     @Published private(set) var people: [String] = []
     @Published private(set) var watched: [String: [String: String]] = [:]
+    @Published private(set) var watchlist: [String: WatchlistEntry] = [:]
     @Published private(set) var lastError: String?
 
     private let settings: ServerSettings
@@ -54,6 +66,31 @@ final class WatchedStore: ObservableObject {
         await post("api/watched", ["id": title.id, "person": person, "watched": now])
     }
 
+    func isOnWatchlist(_ title: Title) -> Bool {
+        watchlist[title.id] != nil
+    }
+
+    /// Add the title to the shared watchlist, or take it off.
+    func toggleWatchlist(_ title: Title) async {
+        let on = !isOnWatchlist(title)
+        // optimistic
+        watchlist[title.id] = on
+            ? WatchlistEntry(added: Filters.isoDay(Date()), title: title.title, year: title.year, poster: title.poster)
+            : nil
+        persist()
+        var body: [String: Any] = ["id": title.id, "on": on, "title": title.title]
+        if let year = title.year { body["year"] = year }
+        if let poster = title.poster { body["poster"] = poster }
+        await post("api/watchlist", body)
+    }
+
+    /// Take an entry off by id, for entries whose title is no longer in the catalog.
+    func removeFromWatchlist(id: String) async {
+        watchlist[id] = nil
+        persist()
+        await post("api/watchlist", ["id": id, "on": false])
+    }
+
     func addPerson(_ name: String) async {
         let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !n.isEmpty, !people.contains(where: { $0.caseInsensitiveCompare(n) == .orderedSame }) else { return }
@@ -78,11 +115,12 @@ final class WatchedStore: ObservableObject {
     private func apply(_ snap: Snapshot) {
         people = snap.people
         watched = snap.watched
+        watchlist = snap.watchlist ?? [:]
         persist()
     }
 
     private func persist() {
-        if let data = try? JSONEncoder().encode(Snapshot(people: people, watched: watched)) {
+        if let data = try? JSONEncoder().encode(Snapshot(people: people, watched: watched, watchlist: watchlist)) {
             UserDefaults.standard.set(data, forKey: cacheKey)
         }
     }

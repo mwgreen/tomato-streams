@@ -72,6 +72,11 @@ the release up within 6 hours. atvloadly installs the app as
 - **Settings**: server address (pick a discovered one or type it), refresh, hide-no-score
   and show-hidden switches, and which streaming apps are installed.
 - **Hide title** on the title page keeps a title out of the grid (local to the Apple TV).
+- **Watchlist**: **Add to Watchlist** on a title page puts a movie or series on the
+  list (press again to take it off); a yellow bookmark marks it on its poster. The
+  **Watchlist** tab shows both kinds together, newest addition first, and lists entries
+  that have left your services with a Remove button. The list is shared with the web
+  app via `serve.py`.
 - **Watched by**: add people under Settings → People, mark a title on its page with the
   "Watched by" buttons, and use the "Watched" chip on the Movies / TV tabs to hide what
   a person (or anyone) has seen. The list is shared with the web app via `serve.py`.

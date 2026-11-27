@@ -65,7 +65,8 @@ struct TitleGrid: View {
     var body: some View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: 56) {
             ForEach(titles) { t in
-                TitleCard(title: t, isNew: isNew(t), isHidden: hidden.contains(t), watchedBy: watched.watchedBy(t))
+                TitleCard(title: t, isNew: isNew(t), isHidden: hidden.contains(t), watchedBy: watched.watchedBy(t),
+                          onWatchlist: watched.isOnWatchlist(t))
             }
         }
     }

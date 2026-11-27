@@ -2,14 +2,16 @@
 (function () {
   "use strict";
 
-  const KIND = new URLSearchParams(location.search).get("kind") === "tv" ? "tv" : "movie";
-  const DATA_URL = KIND === "tv" ? "../data/tv.json" : "../data/movies.json";
-  const NOUN = KIND === "tv" ? ["series", "series"] : ["movie", "movies"];
+  const KIND_PARAM = new URLSearchParams(location.search).get("kind");
+  const KIND = KIND_PARAM === "tv" || KIND_PARAM === "watchlist" ? KIND_PARAM : "movie";
+  const WATCHLIST = KIND === "watchlist";   // the Watchlist page mixes movies and series
+  const DATA_FILES = { movie: "data/movies.json", tv: "data/tv.json" };
+  const NOUN = KIND === "tv" ? ["series", "series"] : WATCHLIST ? ["title", "titles"] : ["movie", "movies"];
   const PAGE_SIZE = 120;
   const HIDDEN_KEY = "smf.hidden." + KIND;
   const VIEW_KEY = "smf.view";
   const STATE_KEY = "smf.state";   // last filters/sort, shared by the Movies and TV pages
-  const WATCHED_KEY = "smf.watched"; // offline fallback for people + watched marks
+  const WATCHED_KEY = "smf.watched"; // offline fallback for people, watched marks and the watchlist
   const VIEWS = ["grid", "list"];
 
   const $ = (id) => document.getElementById(id);
@@ -32,8 +34,8 @@
   let data = { movies: [], services: [], ui_defaults: {} };
   let allGenres = [];
   let hidden = loadHidden();
-  // People and "watched by" marks, shared with the Apple TV app through serve.py.
-  let watched = { people: [], watched: {} };
+  // People, "watched by" marks and the watchlist, shared with the Apple TV app through serve.py.
+  let watched = { people: [], watched: {}, watchlist: {} };
   let watchedApi = true;   // false when there is no server (static hosting): falls back to localStorage
   let visible = [];     // current filtered + sorted list
   let rendered = 0;     // how many of `visible` are in the DOM
@@ -138,6 +140,7 @@
   // Hidden titles (localStorage)
   // ---------------------------------------------------------------------
   function loadHidden() {
+    if (WATCHLIST) return new Set();   // hiding is per page; the watchlist shows everything on it
     try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]")); }
     catch { return new Set(); }
   }
@@ -155,9 +158,9 @@
   function loadWatchedLocal() {
     try {
       const raw = JSON.parse(localStorage.getItem(WATCHED_KEY) || "null");
-      if (raw && Array.isArray(raw.people)) return { people: raw.people, watched: raw.watched || {} };
+      if (raw && Array.isArray(raw.people)) return { people: raw.people, watched: raw.watched || {}, watchlist: raw.watchlist || {} };
     } catch { /* ignore */ }
-    return { people: [], watched: {} };
+    return { people: [], watched: {}, watchlist: {} };
   }
   function saveWatchedLocal() {
     try { localStorage.setItem(WATCHED_KEY, JSON.stringify(watched)); } catch { /* ignore */ }
@@ -184,8 +187,10 @@
   async function loadWatched() {
     const remote = await watchedRequest("../api/watched");
     watched = remote && Array.isArray(remote.people) ? remote : loadWatchedLocal();
+    watched.watchlist = watched.watchlist || {};
     saveWatchedLocal();
     renderPeople();
+    renderWatchlistCount();
   }
 
   async function addPerson(name) {
@@ -225,8 +230,8 @@
     if (remote) watched = remote;
     saveWatchedLocal();
     renderWatchedRow(m);
-    for (const node of document.querySelectorAll(`[data-id="${m.tmdb_id}"] .watched-line`)) node.textContent = watchedLineText(m);
-    for (const node of document.querySelectorAll(`[data-id="${m.tmdb_id}"]`)) node.classList.toggle("is-watched", watchedBy(m).length > 0);
+    for (const node of document.querySelectorAll(`[data-id="${titleId(m)}"] .watched-line`)) node.textContent = watchedLineText(m);
+    for (const node of document.querySelectorAll(`[data-id="${titleId(m)}"]`)) node.classList.toggle("is-watched", watchedBy(m).length > 0);
   }
 
   const watchedLineText = (m) => { const w = watchedBy(m); return w.length ? `✓ Watched by ${w.join(", ")}` : ""; };
@@ -244,12 +249,77 @@
 
   function renderWatchedRow(m) {
     const row = $("detail-watched");
-    if (!row || (el.detail.open && el.detail.dataset.id !== String(m.tmdb_id))) return;
+    if (!row || (el.detail.open && el.detail.dataset.id !== titleId(m))) return;
     if (!watched.people.length) { row.innerHTML = `<span class="lbl">Watched by: add people in the sidebar to track who has seen this.</span>`; return; }
     const seen = watchedBy(m);
     row.innerHTML = `<span class="lbl">Watched by</span>` + watched.people.map((p) =>
       `<button type="button" class="person-chip" data-person="${escapeHtml(p)}" aria-pressed="${seen.includes(p)}">${seen.includes(p) ? "✓ " : ""}${escapeHtml(p)}</button>`).join("");
     for (const b of row.querySelectorAll(".person-chip")) b.addEventListener("click", () => toggleWatched(m, b.dataset.person));
+  }
+
+  // ---------------------------------------------------------------------
+  // Watchlist (one shared list of movies and series)
+  // ---------------------------------------------------------------------
+  const onWatchlist = (m) => !!(watched.watchlist || {})[titleId(m)];
+
+  function setWatchlistButton(b, on) {
+    b.setAttribute("aria-pressed", String(on));
+    b.title = on ? "Remove from watchlist" : "Add to watchlist";
+    b.setAttribute("aria-label", b.title);
+    b.textContent = b.classList.contains("wl-btn-wide") ? (on ? "✓ On watchlist" : "＋ Add to watchlist") : (on ? "✓" : "＋");
+  }
+  const watchlistButtonHtml = (m) => {
+    const on = onWatchlist(m);
+    const tip = on ? "Remove from watchlist" : "Add to watchlist";
+    return `<button class="wl-btn" type="button" aria-pressed="${on}" title="${tip}" aria-label="${tip}">${on ? "✓" : "＋"}</button>`;
+  };
+
+  function renderWatchlistCount() {
+    const n = Object.keys(watched.watchlist || {}).length;
+    const out = $("watchlist-count");
+    if (out) out.textContent = n ? String(n) : "";
+  }
+
+  /** Bring every button for this title (cards, list rows, the open detail page) in line. */
+  function syncWatchlistUi(m) {
+    const on = onWatchlist(m);
+    for (const node of document.querySelectorAll(`[data-id="${titleId(m)}"]`)) {
+      for (const b of node.querySelectorAll(".wl-btn")) setWatchlistButton(b, on);
+      // On the Watchlist page a removed title stays, dimmed, until the next refresh so it can be put back.
+      if (WATCHLIST && node !== el.detail) node.classList.toggle("off-watchlist", !on);
+    }
+    renderWatchlistCount();
+  }
+
+  async function toggleWatchlist(m) {
+    const id = titleId(m);
+    const on = !onWatchlist(m);
+    const list = watched.watchlist || (watched.watchlist = {});
+    const before = list[id];
+    const info = { title: m.title, year: m.year ?? null, poster: m.poster || null };
+    // optimistic update
+    if (on) list[id] = { added: new Date().toISOString().slice(0, 10), ...info }; else delete list[id];
+    syncWatchlistUi(m);
+    const remote = await watchedRequest("../api/watchlist", { id, on, ...info });
+    if (remote) { watched = remote; watched.watchlist = watched.watchlist || {}; }
+    else if (watchedApi) {   // the server refused or is unreachable: undo
+      if (before) watched.watchlist[id] = before; else delete watched.watchlist[id];
+    }
+    saveWatchedLocal();
+    syncWatchlistUi(m);
+  }
+
+  /** Watchlist entries that are no longer in either catalog, as bare titles from what was stored with them. */
+  function unavailableTitles(known) {
+    const out = [];
+    for (const [id, entry] of Object.entries(watched.watchlist || {})) {
+      if (known.has(id)) continue;
+      const [kind, tmdbId] = id.split("-");
+      out.push({ kind, tmdb_id: Number(tmdbId), title: (entry && entry.title) || id, original_title: "",
+                 year: (entry && entry.year) || null, poster: (entry && entry.poster) || null,
+                 services: [], genres: [], rt: {}, unavailable: true });
+    }
+    return out;
   }
 
   // ---------------------------------------------------------------------
@@ -303,10 +373,14 @@
 
     const hideWatched = new Set(state.hw);
     return data.movies.filter((m) => {
-      const isHidden = hidden.has(m.tmdb_id);
-      if (isHidden && !state.sh) return false;
       if (hideWatched.size && watchedBy(m).some((p) => hideWatched.has(p))) return false;
       if (svc && !m.services.some((s) => svc.has(s))) return false;
+      if (genres.size && !(m.genres || []).some((g) => genres.has(g))) return false;
+      if (q && !norm(m.title).includes(q) && !norm(m.original_title).includes(q)) return false;
+      // The Watchlist page shows what is on the list; score, date and runtime filters do not apply there.
+      if (WATCHLIST) return onWatchlist(m);
+      const isHidden = hidden.has(m.tmdb_id);
+      if (isHidden && !state.sh) return false;
       const rt = m.rt || {};
       const hasScore = rt.critic_score != null || rt.audience_score != null;
       if (state.hn && !hasScore) return false;
@@ -314,12 +388,10 @@
       if (state.ma > 0 && !(rt.audience_score >= state.ma)) return false;
       if (state.mr > 0 && rt.critic_score != null && !((rt.critic_count || 0) >= state.mr)) return false;
       if (state.cf && !rt.certified_fresh) return false;
-      if (genres.size && !(m.genres || []).some((g) => genres.has(g))) return false;
       if (y0 != null && !(releaseKey(m, false) >= y0)) return false;
       if (y1 != null && !(releaseKey(m, true) <= y1)) return false;
       if (a0 != null) { const ak = addedKey(m); if (!ak || ak < a0) return false; }
       if (rtMax != null && m.runtime && m.runtime > rtMax) return false;
-      if (q && !norm(m.title).includes(q) && !norm(m.original_title).includes(q)) return false;
       return true;
     });
   }
@@ -354,6 +426,11 @@
     renderMore();
     el.count.textContent = `${visible.length.toLocaleString()} ${visible.length === 1 ? NOUN[0] : NOUN[1]}`;
     el.empty.hidden = visible.length !== 0;
+    if (WATCHLIST) {
+      el.empty.textContent = Object.keys(watched.watchlist || {}).length
+        ? "Nothing on your watchlist matches these filters."
+        : "Your watchlist is empty. Add movies and series with the ＋ button on a title.";
+    }
     writeHash();
   }
 
@@ -423,7 +500,7 @@
 
   /** Badges that open the service directly (used on cards and list rows). */
   function watchBadgesHtml(m) {
-    if (!m.services.length) return `<span class="badge badge-none">no service</span>`;
+    if (!m.services.length) return m.unavailable ? `<span class="badge badge-none" title="Not on any of your services right now">not streaming</span>` : `<span class="badge badge-none">no service</span>`;
     return m.services.map((s) => {
       const url = watchUrl(m, s);
       const label = escapeHtml(s);
@@ -442,7 +519,7 @@
       const tip = !exact ? `Search for this title on ${s}` : episode ? `Opens an episode of this series on ${s} (${s} gives no show-page link)` : `Open this title on ${s}`;
       return `<a class="watch-btn${exact ? "" : " watch-btn-search"}" data-service="${slug(s)}" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="${escapeHtml(tip)}"><span class="play">${exact ? "▶" : "⌕"}</span> ${exact ? "Watch on" : "Find on"} ${escapeHtml(s)}${episode ? '<small class="lvl">episode</small>' : ""}</a>`;
     }).join("");
-    return buttons || `<span class="badge badge-none">not on a configured service</span>`;
+    return buttons || `<span class="badge badge-none">${m.unavailable ? "not on any of your services right now" : "not on a configured service"}</span>`;
   }
 
   /** "2016–2022", "2022–" (still running) or "1995". */
@@ -475,10 +552,11 @@
     const node = document.createElement("article");
     node.className = "card" + (hidden.has(m.tmdb_id) ? " is-hidden" : "") + (watchedBy(m).length ? " is-watched" : "");
     node.tabIndex = 0;
-    node.dataset.id = m.tmdb_id;
+    node.dataset.id = titleId(m);
     const meta = [yearsLabel(m), lengthLabel(m)].filter(Boolean).join(" · ");
     node.innerHTML = `
       <button class="hide-btn" type="button" title="${hidden.has(m.tmdb_id) ? "Un-hide" : "Hide this title"}" aria-label="Hide">✕</button>
+      ${watchlistButtonHtml(m)}
       <div class="poster">${m.poster ? `<img loading="lazy" src="${m.poster}" alt="">` : `<div class="no-poster">${escapeHtml(m.title)}</div>`}</div>
       <div class="card-body">
         <h3>${escapeHtml(m.title)}${isNew(m) ? `<span class="tag-new" title="Added ${fmtDate(addedKey(m))}">New</span>` : ""}</h3>
@@ -495,8 +573,12 @@
       ev.stopPropagation();
       toggleHidden(m, node);
     });
+    node.querySelector(".wl-btn").addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      toggleWatchlist(m);
+    });
     node.addEventListener("click", (ev) => { if (!ev.target.closest("a.badge")) openDetail(m); });
-    node.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.target.closest("a.badge")) openDetail(m); });
+    node.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.target.closest("a.badge, button")) openDetail(m); });
     return node;
   }
 
@@ -504,7 +586,7 @@
     const node = document.createElement("tr");
     node.className = "list-row" + (hidden.has(m.tmdb_id) ? " is-hidden" : "") + (watchedBy(m).length ? " is-watched" : "");
     node.tabIndex = 0;
-    node.dataset.id = m.tmdb_id;
+    node.dataset.id = titleId(m);
     node.innerHTML = `
       <td class="col-poster">${m.poster ? `<img loading="lazy" src="${m.poster}" alt="">` : `<span class="thumb-empty"></span>`}</td>
       <td class="col-title">
@@ -521,15 +603,19 @@
       <td class="col-count">${m.rt.critic_count ? m.rt.critic_count.toLocaleString() : ""}</td>
       <td class="col-score">${audienceScoreHtml(m.rt, false)}</td>
       <td class="col-services"><div class="badges">${watchBadgesHtml(m)}</div></td>
-      <td class="col-actions"><button class="hide-btn" type="button" title="${hidden.has(m.tmdb_id) ? "Un-hide" : "Hide this title"}" aria-label="Hide">✕</button></td>`;
+      <td class="col-actions">${watchlistButtonHtml(m)}<button class="hide-btn" type="button" title="${hidden.has(m.tmdb_id) ? "Un-hide" : "Hide this title"}" aria-label="Hide">✕</button></td>`;
     const img = node.querySelector("img");
     if (img) img.addEventListener("error", () => img.replaceWith(Object.assign(document.createElement("span"), { className: "thumb-empty" })), { once: true });
     node.querySelector(".hide-btn").addEventListener("click", (ev) => {
       ev.stopPropagation();
       toggleHidden(m, node);
     });
+    node.querySelector(".wl-btn").addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      toggleWatchlist(m);
+    });
     node.addEventListener("click", (ev) => { if (!ev.target.closest("a.badge")) openDetail(m); });
-    node.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.target.closest("a.badge")) openDetail(m); });
+    node.addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.target.closest("a.badge, button")) openDetail(m); });
     return node;
   }
 
@@ -586,7 +672,10 @@
     if (m.imdb_id) links.push(`<a href="https://www.imdb.com/title/${encodeURIComponent(m.imdb_id)}/" target="_blank" rel="noopener">IMDb ↗</a>`);
     links.push(`<a href="https://www.themoviedb.org/${m.kind === "tv" ? "tv" : "movie"}/${m.tmdb_id}" target="_blank" rel="noopener">TMDB ↗</a>`);
     $("detail-links").innerHTML = links.join("");
-    el.detail.dataset.id = String(m.tmdb_id);
+    el.detail.dataset.id = titleId(m);
+    const wl = $("detail-watchlist");
+    setWatchlistButton(wl, onWatchlist(m));
+    wl.onclick = () => toggleWatchlist(m);
     renderWatchedRow(m);
     el.detail.showModal();
     el.detail.querySelector(".detail-body").scrollTop = 0;
@@ -597,20 +686,20 @@
   // On-demand exact links (serve.py -> Watchmode), fetched when a title is opened
   // ---------------------------------------------------------------------
   let watchApiAvailable = true;   // false after a 404 (static hosting) or when the server has no key
-  const watchLookups = new Map(); // tmdb_id -> Promise
+  const watchLookups = new Map(); // title id -> Promise
 
   function needsWatchLookup(m) {
     return m.services.some((s) => !(m.watch_urls && m.watch_urls[s]));
   }
 
   function refreshWatchLinks(m) {
-    for (const node of document.querySelectorAll(`[data-id="${m.tmdb_id}"] .badges`)) node.innerHTML = watchBadgesHtml(m);
-    if (el.detail.open && el.detail.dataset.id === String(m.tmdb_id)) $("detail-watch").innerHTML = watchButtonsHtml(m);
+    for (const node of document.querySelectorAll(`[data-id="${titleId(m)}"] .badges`)) node.innerHTML = watchBadgesHtml(m);
+    if (el.detail.open && el.detail.dataset.id === titleId(m)) $("detail-watch").innerHTML = watchButtonsHtml(m);
   }
 
   function lookupWatchLinks(m) {
     if (!watchApiAvailable || !needsWatchLookup(m) || m._watchLookedUp) return;
-    if (watchLookups.has(m.tmdb_id)) return;
+    if (watchLookups.has(titleId(m))) return;
     const p = fetch(`../api/watch-links?kind=${encodeURIComponent(m.kind)}&id=${encodeURIComponent(m.tmdb_id)}`, { cache: "no-store" })
       .then(async (resp) => {
         if (resp.status === 404) {
@@ -631,8 +720,8 @@
         if (body.enabled === false && !Object.keys(body.watch_urls || {}).length) watchApiAvailable = false;
       })
       .catch(() => { /* offline or no server: keep search links */ })
-      .finally(() => watchLookups.delete(m.tmdb_id));
-    watchLookups.set(m.tmdb_id, p);
+      .finally(() => watchLookups.delete(titleId(m)));
+    watchLookups.set(titleId(m), p);
   }
 
   function closeDetail() {
@@ -766,7 +855,8 @@
       a.classList.toggle("active", active);
       if (active) a.setAttribute("aria-current", "page");
     }
-    document.title = KIND === "tv" ? "Streaming Finder · TV Series" : "Streaming Finder · Movies";
+    document.title = `Streaming Finder · ${KIND === "tv" ? "TV Series" : WATCHLIST ? "Watchlist" : "Movies"}`;
+    document.body.classList.toggle("kind-watchlist", WATCHLIST);
     if (KIND === "tv") {
       $("release-legend").textContent = "First aired";
       $("runtime-label").textContent = "Max episode length (minutes)";
@@ -776,20 +866,34 @@
 
   async function boot() {
     applyKind();
-    let json;
-    try {
-      const resp = await fetch(DATA_URL, { cache: "no-store" });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      json = await resp.json();
-    } catch (err) {
+    // Movies and TV each load their own file; the Watchlist page loads both and keeps what is on the list.
+    const kinds = WATCHLIST ? ["movie", "tv"] : [KIND];
+    const loaded = await Promise.all(kinds.map(async (kind) => {
+      try {
+        const resp = await fetch("../" + DATA_FILES[kind], { cache: "no-store" });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        for (const m of json.movies || []) { m.rt = m.rt || {}; m.services = m.services || []; m.genres = m.genres || []; m.kind = m.kind || kind; }
+        return { kind, json };
+      } catch (err) {
+        return { kind, error: err };
+      }
+    }));
+    const ok = loaded.filter((l) => l.json);
+    if (!ok.length) {   // on the Watchlist page one missing file (TV sync turned off) is fine
       el.count.textContent = "";
       el.error.hidden = false;
-      const file = KIND === "tv" ? "data/tv.json" : "data/movies.json";
-      el.error.innerHTML = `Could not load <code>${file}</code> (${escapeHtml(err.message)}). Run <code>python sync.py</code> first, then serve with <code>python serve.py</code>.`;
+      el.error.innerHTML = `Could not load <code>${DATA_FILES[loaded[0].kind]}</code> (${escapeHtml(loaded[0].error.message)}). Run <code>python sync.py</code> first, then serve with <code>python serve.py</code>.`;
       return;
     }
-    data = { movies: [], services: [], ui_defaults: {}, ...json };
-    for (const m of data.movies) { m.rt = m.rt || {}; m.services = m.services || []; m.genres = m.genres || []; m.kind = m.kind || KIND; }
+    data = { movies: [], services: [], ui_defaults: {}, ...ok[0].json };
+    data.movies = ok.flatMap((l) => l.json.movies || []);
+    data.services = [...new Set(ok.flatMap((l) => l.json.services || []))];
+    await loadWatched();
+    if (WATCHLIST) {
+      const known = new Set(data.movies.map(titleId));
+      data.movies = data.movies.filter(onWatchlist).concat(unavailableTitles(known));
+    }
     if (data.generated_at) {
       const d = new Date(data.generated_at);
       el.generated.textContent = `data from ${isNaN(d) ? data.generated_at : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}`;
@@ -802,7 +906,6 @@
     buildServiceChecks();
     buildGenreChecks();
     el.hiddenCount.textContent = hidden.size;
-    await loadWatched();
     state = readHash();
     stateToForm();
     wire();
