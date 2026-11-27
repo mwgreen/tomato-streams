@@ -8,7 +8,7 @@ and a press on **Watch on <service>** launches that service's Apple TV app.
 
 - A Mac with Xcode 16 or newer (the app targets tvOS 17+, SwiftUI only, no packages).
 - An Apple developer account. The free one installs to your own Apple TV for 7 days at
-  a time; the paid one ($99/yr) keeps it installed for a year or via TestFlight.
+  a time; the paid one ($99/yr), which this setup uses, keeps it installed for a year.
 - `serve.py` running on a computer on the same network, started with `--host 0.0.0.0`.
   Install `zeroconf` (`pip install zeroconf`) on that computer and the Apple TV finds it
   automatically; otherwise type its address once in Settings.
@@ -37,7 +37,7 @@ Security, Bonjour and `LSApplicationQueriesSchemes` entries matter).
 
 Once Xcode is signed in (Settings → Accounts) and the Apple TV is paired (Window →
 Devices and Simulators), this builds, signs, installs and launches without the Xcode UI.
-It is also how to renew the free-team install, which expires after 7 days:
+It installs a separate copy from the one atvloadly manages (see below):
 
 ```sh
 tvos/install-appletv.sh                    # default device: "Entertainment Room"
@@ -48,14 +48,29 @@ The team id and bundle id live in `project.yml`, so regenerating the project kee
 
 ### Keeping it installed (atvloadly on sanctarus)
 
-The free-team profile lasts 7 days. Signing and reinstalling run on sanctarus with
-[atvloadly](https://github.com/bitxeno/atvloadly), set up alongside TabloTV (see
-tablo-proxy's `tvos/README.md`), and it re-signs the app in the early hours once it's within 3 days of expiring. A push to main that touches
+Installing runs on sanctarus with [atvloadly](https://github.com/bitxeno/atvloadly)
+(web UI on sanctarus only: http://localhost:5533). A push to main that touches
 `tvos/` runs `.github/workflows/tvos-ipa.yml`, which builds an unsigned IPA
-(`tvos/scripts/build-ipa.sh`) and publishes it as a `tvos-N` release. atvloadly picks
-the release up within 6 hours. atvloadly installs the app as
-`com.mwgreen.streamingfinder.<TEAM_ID>`, a separate app from the one
-`install-appletv.sh` installs.
+(`tvos/scripts/build-ipa.sh`) and publishes it as a `tvos-N` release. atvloadly
+checks for a new release every 6 hours and installs it in its nightly window
+(03:00 to 06:30). To get a build sooner, press Update on the app in the web UI.
+
+Signing uses the paid developer account (team `TA8B32D228`) in atvloadly's
+"external certificate" mode, with no Apple ID login:
+
+- The private key, certificate, `.p12` and provisioning profiles are in
+  `~/atvloadly/signing/` on sanctarus. The identity is imported in atvloadly as
+  "Streaming Finder (in place)".
+- The profile is for `com.mwgreen.streamingfinder.TA8B32D228`, and the app is
+  installed with that as its custom bundle identifier. A copy from
+  `install-appletv.sh` (`com.mwgreen.streamingfinder`) is a separate app.
+- **Yearly renewal:** the certificate and the profile expire on 2027-11-27 and
+  atvloadly does not renew them. Before then, create a new Apple Development
+  certificate and a tvOS App Development profile at developer.apple.com, import
+  them as a new identity (or replace the profile on the existing one), and
+  reinstall the app from the web UI.
+- **Quit the app first:** an install hangs at the device step while the app is
+  open on the Apple TV. Force-quit it, then install.
 
 ## Using it
 
